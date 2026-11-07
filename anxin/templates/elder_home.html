@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}今日平安 · 安芯{% endblock %}
+{% block css %}<link rel="stylesheet" href="/static/css/elder.css">{% endblock %}
+{% block bodyclass %}elder-page{% endblock %}
+{% block content %}
+
+<div class="e-top">
+  <button class="e-voice" aria-label="播放语音提示" onclick="speak('您可以对我说：我很好，或者，打电话给儿子')">🔊</button>
+  <span class="e-weather">☀ 晴 · 18℃</span>
+</div>
+
+<div class="e-greet">
+  <h1>早上好，{{ elder.name }}</h1>
+  <div class="e-date">{{ today }} {{ weekday }}</div>
+</div>
+
+<button class="e-checkin {{ 'done' if checked_today }}" id="btn-checkin" onclick="doCheckin()">
+  {% if checked_today %}今天已报平安{% else %}我 很 好 ✓{% endif %}
+</button>
+<div class="e-hint" id="checkin-hint" aria-live="polite">
+  {% if checked_today %}已于 {{ elder.last_checkin[-5:] }} 报平安，谢谢！{% else %}点一下上面的圆按钮，告诉家人您今天很好{% endif %}
+</div>
+
+<div class="e-cards">
+  <button class="e-card" onclick="speak('早上八点，降压药一片，已经吃过啦')">💊 吃药<small>8:00 已吃</small></button>
+  <button class="e-card" onclick="location.href='/elder/sos'">📞 打给他<small>儿子 李伟</small></button>
+  <button class="e-card" onclick="speak('已呼叫社区网格员王芳，请稍等')">🏠 找小王<small>社区 王芳</small></button>
+</div>
+
+<button class="e-sos" id="btn-sos" onclick="goSos()">
+  <span class="progress" id="sos-progress"></span>
+  🆘 紧 急 求 助 · 长按 3 秒
+</button>
+
+<script>
+/* 语音播报（Web Speech API，浏览器支持时生效） */
+function speak(text) {
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN'; u.rate = 0.85;
+    speechSynthesis.speak(u);
+  } catch (e) { console.log('语音不可用', e); }
+}
+
+/* 打卡：一次点击，无确认弹窗 */
+function doCheckin() {
+  const btn = document.getElementById('btn-checkin');
+  if (btn.classList.contains('done')) return;
+  btn.disabled = true;
+  btn.setAttribute('aria-busy', 'true');
+  if (window.showToast) window.showToast('正在记录今日平安…', 'info', 1800);
+  fetch('/api/checkin', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        btn.classList.add('done');
+        btn.innerText = '今天已报平安';
+        document.getElementById('checkin-hint').innerText = '已于 ' + d.time + ' 报平安，谢谢！';
+        speak('已记录，今天也要照顾好自己');
+        if (window.showToast) window.showToast('已记录，今天平安');
+      } else {
+        btn.disabled = false;
+        if (window.showToast) window.showToast('记录失败，请再试一次', 'error');
+      }
+    })
+    .catch(() => {
+      btn.disabled = false;
+      if (window.showToast) window.showToast('网络暂时不可用，请重试', 'error');
+    })
+    .finally(() => btn.setAttribute('aria-busy', 'false'));
+}
+
+/* SOS：长按 3 秒防误触 */
+(function () {
+  const btn = document.getElementById('btn-sos');
+  const bar = document.getElementById('sos-progress');
+  let timer = null, p = 0;
+  const start = e => {
+    e.preventDefault();
+    timer = setInterval(() => {
+      p += 2;
+      bar.style.width = p + '%';
+      if (p >= 100) { clearInterval(timer); location.href = '/elder/sos'; }
+    }, 60);
+  };
+  const cancel = () => { clearInterval(timer); p = 0; bar.style.width = '0'; };
+  btn.addEventListener('pointerdown', start);
+  btn.addEventListener('pointerup', cancel);
+  btn.addEventListener('pointerleave', cancel);
+  btn.addEventListener('pointercancel', cancel);
+})();
+function goSos() { /* 长按触发跳转，此函数仅兜底 */ }
+</script>
+{% endblock %}

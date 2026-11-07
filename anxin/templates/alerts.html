@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}预警工单 · 安芯{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="flex-between" style="margin-bottom:16px">
+    <div>
+      <h2 style="font-size:20px">预警工单看板</h2>
+      <span class="muted" style="font-size:12px">状态流转全程留痕：待核实 → 已派单 → 处置中 → 已归档（每 5 秒自动刷新）</span>
+    </div>
+    <a class="btn btn-sm" href="/demo/simulator">⚙ 打开演示模拟器</a>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">
+    <div>
+      <div class="card-title" style="color:var(--red)">🔴 待核实 <span id="cnt-pending" class="muted"></span></div>
+      <div id="col-pending"></div>
+    </div>
+    <div>
+      <div class="card-title" style="color:var(--yellow)">🟡 已派单 <span id="cnt-dispatched" class="muted"></span></div>
+      <div id="col-dispatched"></div>
+    </div>
+    <div>
+      <div class="card-title" style="color:var(--blue)">🔵 处置中 <span id="cnt-processing" class="muted"></span></div>
+      <div id="col-processing"></div>
+    </div>
+    <div>
+      <div class="card-title" style="color:var(--green)">🟢 已归档 <span id="cnt-closed" class="muted"></span></div>
+      <div id="col-closed"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const LEVEL_TXT = { red: '紧急', yellow: '关注' };
+const ASSIGNEES = ['王芳（网格员）', '赵敏（志愿者）', '物业老周'];
+
+async function load() {
+  try {
+    const d = await (await fetch('/api/alerts')).json();
+    const cols = { pending: [], dispatched: [], processing: [], closed: [] };
+    d.alerts.forEach(a => cols[a.status].push(a));
+
+    Object.keys(cols).forEach(status => {
+      document.getElementById('cnt-' + status).innerText = '(' + cols[status].length + ')';
+      document.getElementById('col-' + status).innerHTML = cols[status].map(a => card(a, status)).join('');
+    });
+  } catch (e) {
+    if (window.showToast) window.showToast('工单刷新失败，请稍后重试', 'error');
+  }
+}
+
+function card(a, status) {
+  const acts = {
+    pending: `<button class="btn btn-sm" onclick="dispatch(${a.id})">电话核实</button>
+              <button class="btn btn-sm btn-blue" onclick="dispatch(${a.id})">派单</button>`,
+    dispatched: `<button class="btn btn-sm btn-blue" onclick="process(${a.id})">开始处置</button>`,
+    processing: `<button class="btn btn-sm" style="background:var(--green)" onclick="closeOrder(${a.id})">处置完成并归档</button>`,
+    closed: '',
+  }[status];
+  return `
+  <div class="alert-item level-${a.level}" style="flex-direction:column">
+    <div class="flex-between" style="width:100%">
+      <span class="a-title">${a.elder_name}（${a.age}岁）· ${LEVEL_TXT[a.level] || ''}</span>
+      <span class="muted" style="font-size:11px">${a.code}</span>
+    </div>
+    <div class="a-meta" style="width:100%">${a.reason}</div>
+    <div class="a-meta" style="width:100%">${a.created_at}${a.assignee ? ' · 负责人：' + a.assignee : ''}
+      ${a.result ? '<br>处置结果：' + a.result : ''}</div>
+    <div class="flex" style="margin-top:8px">${acts}</div>
+  </div>`;
+}
+
+/* 派单：选择负责人 */
+function dispatch(id) {
+  const i = prompt('派单给（输入序号）：\n1. 王芳（网格员，距 320m）\n2. 赵敏（志愿者，距 450m）\n3. 物业老周（距 600m）', '1');
+  if (!i) return;
+  const assignee = ASSIGNEES[parseInt(i) - 1] ? ASSIGNEES[parseInt(i) - 1].split('（')[0] : '王芳';
+  post(`/api/alerts/${id}/dispatch`, { assignee });
+}
+
+function process(id) { post(`/api/alerts/${id}/process`, {}); }
+
+function closeOrder(id) {
+  const result = prompt('处置结果（将同步子女端）：', '已上门核实，老人一切安好');
+  if (result === null) return;
+  post(`/api/alerts/${id}/close`, { result });
+}
+
+async function post(url, body) {
+  if (window.showToast) window.showToast('正在更新工单…', 'info', 1600);
+  try {
+    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!response.ok) throw new Error('request failed');
+    if (window.showToast) window.showToast('工单状态已更新');
+    load();
+  } catch (e) {
+    if (window.showToast) window.showToast('更新失败，请重试', 'error');
+  }
+}
+
+load();
+setInterval(load, 5000);
+</script>
+{% endblock %}

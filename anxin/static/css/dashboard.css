@@ -1,0 +1,108 @@
+/* ============================================================
+   安芯 · 社区驾驶舱（深色大屏 1920×1080 等比缩放）
+   ============================================================ */
+body.dashboard-page { background: #0E1A2B; color: #DCE9F7; font-size: 14px; }
+
+.screen {
+  width: 1920px; height: 1080px;
+  transform-origin: left top;
+  display: grid;
+  grid-template-rows: 72px 1fr 64px;
+  grid-template-columns: 420px 1fr 430px;
+  gap: 16px; padding: 16px;
+}
+
+/* 顶栏 */
+.d-top {
+  grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between;
+  background: #132338; border: 1px solid rgba(94,164,255,.18); border-radius: var(--radius); padding: 0 28px;
+}
+.d-top h1 { font-size: 26px; letter-spacing: 2px; color: #fff; }
+.d-top h1 span { color: #5EA4FF; margin-right: 14px; }
+.d-top .meta { font-size: 16px; color: #7E9CBF; display: flex; gap: 28px; align-items: center; }
+.d-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4C9A6A; margin-right: 6px; }
+
+/* 面板 */
+.panel {
+  background: rgba(94,164,255,.06);
+  border: 1px solid rgba(94,164,255,.22);
+  border-radius: var(--radius); padding: 18px;
+  display: flex; flex-direction: column;
+}
+.panel h3 { font-size: 16px; font-weight: 600; color: #A9C1DC; margin-bottom: 10px; }
+
+/* 左列 */
+.d-left { display: grid; grid-template-rows: 1fr auto; gap: 16px; }
+.risk-legend { font-size: 15px; line-height: 2; margin-top: 8px; }
+.risk-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+
+/* KPI 数字 */
+.kpi-big { font-family: "DIN Alternate", "Roboto Mono", Consolas, monospace; font-size: 44px; font-weight: 700; color: #fff; }
+.kpi-unit { font-size: 15px; color: #7E9CBF; }
+.visit-bar { height: 10px; background: #22344B; border-radius: var(--radius); overflow: hidden; margin: 10px 0 6px; }
+.visit-bar i { display: block; height: 100%; background: #4C9A6A; border-radius: var(--radius); }
+
+/* 中央地图 */
+.d-map { position: relative; overflow: hidden; background: #0A1522; }
+.d-map .grid-bg {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(94,164,255,.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(94,164,255,.10) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+.map-dot {
+  position: absolute; width: 14px; height: 14px; border-radius: 50%;
+  transform: translate(-50%, -50%); cursor: pointer; z-index: 2;
+  transition: transform .18s ease, filter .18s ease;
+}
+.map-dot::before {
+  content: ""; position: absolute; inset: -15px; border-radius: 50%;
+}
+.map-dot:hover, .map-dot.is-selected { transform: translate(-50%, -50%) scale(1.35); filter: brightness(1.15); }
+.map-dot:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+.map-dot.green { background: #4C9A6A; }
+.map-dot.yellow { background: #E0A030; }
+.map-dot.red { background: #D2453C; animation: pulse 2s infinite; }
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(210,69,60,.55); }
+  70%  { box-shadow: 0 0 0 22px rgba(210,69,60,0); }
+  100% { box-shadow: 0 0 0 0 rgba(210,69,60,0); }
+}
+.map-dot .tip {
+  display: none; position: absolute; left: 18px; top: -8px; white-space: nowrap;
+  background: #132338; border: 1px solid rgba(94,164,255,.3);
+  padding: 4px 10px; border-radius: var(--radius); font-size: 13px; color: #DCE9F7; z-index: 5;
+}
+.map-dot:hover .tip, .map-dot.is-selected .tip, .map-dot:focus-visible .tip { display: block; }
+.map-legend { position: absolute; left: 16px; bottom: 12px; font-size: 13px; color: #7E9CBF; }
+
+/* 右列 */
+.d-right { display: grid; grid-template-rows: 1fr 1fr; gap: 16px; }
+.chart { flex: 1; width: 100%; }
+
+/* 预警滚动条 */
+.d-marquee {
+  grid-column: 1 / -1; display: flex; align-items: center;
+  background: #3A1518; border: 1px solid rgba(210,69,60,.5); border-radius: var(--radius);
+  padding: 0 20px; overflow: hidden;
+}
+.d-marquee .m-label {
+  flex-shrink: 0; color: #FF8F86; font-weight: 600; font-size: 15px; margin-right: 20px;
+}
+.marquee-window {
+  flex: 1; min-width: 0; overflow: hidden; position: relative;
+  padding: 2px 0;
+  /* 滚动文字进入和离开时渐隐，避免边界处突然出现或消失 */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 10%, #000 88%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 10%, #000 88%, transparent 100%);
+}
+.marquee-track {
+  display: inline-block; white-space: nowrap;
+  animation: scroll 24s linear infinite; color: #FFB4AD; font-size: 15px;
+}
+@keyframes scroll { from { transform: translateX(20%); } to { transform: translateX(-100%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .map-dot.red, .marquee-track { animation: none; }
+}

@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}爸妈总览 · 安芯{% endblock %}
+{% block content %}
+<div class="page">
+
+  <!-- 顶部老人卡 -->
+  <div class="card flex" style="gap:24px;margin-bottom:20px">
+    <div style="width:88px;height:88px;border-radius:50%;background:var(--brand-light);display:flex;align-items:center;justify-content:center;font-size:40px">👵</div>
+    <div style="flex:1">
+      <div class="flex" style="gap:12px">
+        <span style="font-size:20px;font-weight:700">{{ elder.name }}</span>
+        <span class="muted">{{ elder.age }} 岁 · {{ elder.address }} · 独居</span>
+        <span class="badge badge-{{ elder.risk_level }}">{{ level_text[elder.risk_level] }}</span>
+      </div>
+      <div class="muted mt-16" style="font-size:13px">
+        慢病：{{ elder.chronic }} ｜ 设备：{{ elder.devices }} ｜
+        {% if elder.last_checkin %}最近报平安：{{ elder.last_checkin }}{% else %}今日尚未报平安{% endif %}
+      </div>
+    </div>
+    <div class="flex">
+      <button class="btn">📞 打电话</button>
+      <button class="btn btn-ghost">💬 发提醒</button>
+    </div>
+  </div>
+
+  <div class="grid-8-4">
+    <!-- 左：今日时间轴 -->
+    <div class="card">
+      <div class="card-title">今日平安时间轴</div>
+      <ul class="timeline">
+        {% for e in events %}
+        <li class="{{ 'warn' if e.kind == 'warn' else '' }}">
+          <div class="t-time">{{ e.ts[-5:] }}</div>
+          <div class="t-text">{{ e.icon }} {{ e.text }}</div>
+        </li>
+        {% else %}
+        <li class="muted">今天还没有活动记录（数据每日 24 点后汇总）</li>
+        {% endfor %}
+      </ul>
+      <div class="muted" style="font-size:12px;margin-top:8px">
+        数据来源：门磁 / 智能水电表 / 红外活动监测（模拟数据）
+      </div>
+    </div>
+
+    <!-- 右：异常提醒 -->
+    <div class="card">
+      <div class="card-title">异常提醒</div>
+      {% for a in alerts %}
+      <div class="alert-item level-{{ a.level }}">
+        <div class="a-main">
+          <div class="a-title">{{ a.reason[:18] }}{% if a.reason|length > 18 %}…{% endif %}</div>
+          <div class="a-meta">{{ a.created_at }} ·
+            <span class="status-chip status-{{ a.status }}">{{ status_text[a.status] }}</span>
+            {% if a.assignee %} · {{ a.assignee }}{% endif %}
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <p class="muted">暂无异常，一切安好 😊</p>
+      {% endfor %}
+      <div class="card-title mt-16">一周活动量</div>
+      <div id="chart-activity" style="height:180px"></div>
+    </div>
+  </div>
+
+  <div class="card mt-16">
+    <div class="card-title">代约服务（助餐 / 助浴 / 助医 / 保洁）</div>
+    <div class="flex">
+      <button class="btn">🍱 预约社区助餐</button>
+      <button class="btn btn-ghost">🚑 陪同就医</button>
+      <button class="btn btn-ghost">🧹 居室保洁</button>
+      <span class="muted" style="font-size:12px">由社区"服务清单"对接 provider 上门（演示）</span>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script>
+/* 一周活动量柱状图：低于均值30%的柱子标黄 */
+const readings = {{ readings | map(attribute='score') | list | tojson }};
+const days = {{ readings | map(attribute='day') | list | tojson }};
+const avg = readings.slice(0, 6).reduce((a, b) => a + b, 0) / 6;
+
+const chart = echarts.init(document.getElementById('chart-activity'));
+chart.setOption({
+  grid: { left: 34, right: 8, top: 16, bottom: 22 },
+  xAxis: { type: 'category', data: days.map(d => d.slice(5)), axisLabel: { color: '#6B675C' } },
+  yAxis: { type: 'value', axisLabel: { color: '#6B675C' }, splitLine: { lineStyle: { color: '#E8E2D6' } } },
+  series: [{
+    type: 'bar', barWidth: 22,
+    data: readings.map(v => ({
+      value: v,
+      itemStyle: { color: v < avg * 0.7 ? '#E0A030' : '#4C9A6A', borderRadius: [24, 24, 0, 0] }
+    })),
+    markLine: {
+      silent: true, symbol: 'none',
+      lineStyle: { color: '#E8734A', type: 'dashed' },
+      label: { formatter: '日常均值', color: '#E8734A' },
+      data: [{ yAxis: avg }]
+    }
+  }]
+});
+window.addEventListener('resize', () => chart.resize());
+</script>
+{% endblock %}

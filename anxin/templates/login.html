@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}登录 · 安芯{% endblock %}
+{% block content %}
+<div class="page login-page">
+  <header class="login-header">
+    <h1 class="login-brand brand-wordmark" aria-label="安芯">
+      <span class="brand-an" aria-hidden="true">安</span><span class="brand-xin" aria-hidden="true">芯</span>
+    </h1>
+    <p class="muted login-subtitle">独居老人 AI 安全守护与社区关爱平台 · 演示登录</p>
+  </header>
+
+  <main class="login-main">
+  <div class="role-grid">
+    <form class="role-form" method="post" action="/login">
+      <input type="hidden" name="role" value="elder">
+      <button class="card role-card" type="submit">
+        <div style="font-size:44px">👵</div>
+        <div style="font-size:18px;font-weight:600;margin:8px 0 4px">我是老人</div>
+        <div class="muted">张桂芳 · 82 岁 · 今日平安打卡与求助</div>
+      </button>
+    </form>
+    <form class="role-form" method="post" action="/login">
+      <input type="hidden" name="role" value="family">
+      <button class="card role-card" type="submit">
+        <div style="font-size:44px">👨‍💼</div>
+        <div style="font-size:18px;font-weight:600;margin:8px 0 4px">我是子女</div>
+        <div class="muted">李伟 · 上海 · 远程查看母亲状态</div>
+      </button>
+    </form>
+    <form class="role-form" method="post" action="/login">
+      <input type="hidden" name="role" value="community">
+      <button class="card role-card" type="submit">
+        <div style="font-size:44px">🏘️</div>
+        <div style="font-size:18px;font-weight:600;margin:8px 0 4px">我是社区</div>
+        <div class="muted">王芳 · 网格员 · 驾驶舱 / 三个清单 / 工单</div>
+      </button>
+    </form>
+    <form class="role-form" method="post" action="/login">
+      <input type="hidden" name="role" value="volunteer">
+      <button class="card role-card" type="submit">
+        <div style="font-size:44px">🙋</div>
+        <div style="font-size:18px;font-weight:600;margin:8px 0 4px">我是志愿者</div>
+        <div class="muted">赵敏 · 银龄互助 · 接单探访</div>
+      </button>
+    </form>
+  </div>
+  </main>
+
+  <p class="muted login-footer">
+    中国大学生计算机设计大赛 · Web 应用与开发 · 演示数据为模拟生成
+  </p>
+</div>
+{% endblock %}

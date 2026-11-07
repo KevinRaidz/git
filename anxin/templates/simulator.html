@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}演示模拟器 · 安芯{% endblock %}
+{% block content %}
+<div class="page" style="max-width:820px">
+  <div class="card">
+    <div class="card-title">IoT 数据模拟器（答辩演示总开关）</div>
+    <p class="muted" style="margin-bottom:16px">
+      真实传感设备无法现场部署，本页面向数据库注入异常时序数据，秒级生成预警，
+      驾驶舱 / 工单页每 5 秒自动刷新。<b>演示数据已明确标注"模拟"。</b>
+    </p>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+      <button class="card" style="cursor:pointer;border:2px solid var(--red);font-family:inherit" onclick="trigger('fall')">
+        <div style="font-size:34px">🧍‍♀️⬇️</div>
+        <b style="font-size:15px">夜间跌倒</b>
+        <div class="muted" style="font-size:12px">红外监测跌倒姿态<br>15 分钟未起身 → 红色预警</div>
+      </button>
+      <button class="card" style="cursor:pointer;border:2px solid var(--yellow);font-family:inherit" onclick="trigger('no_water')">
+        <div style="font-size:34px">💧🚫</div>
+        <b style="font-size:15px">全天无用水</b>
+        <div class="muted" style="font-size:12px">用水 0L，门磁仅 1 次<br>→ 黄色预警</div>
+      </button>
+      <button class="card" style="cursor:pointer;border:2px solid var(--yellow);font-family:inherit" onclick="trigger('door_stuck')">
+        <div style="font-size:34px">🚪⏱️</div>
+        <b style="font-size:15px">门磁 36 小时未动</b>
+        <div class="muted" style="font-size:12px">夜间无红外活动<br>→ 黄色预警</div>
+      </button>
+    </div>
+
+    <div id="sim-result" style="margin-top:20px"></div>
+
+    <div class="flex mt-16">
+      <a class="btn" href="/community/dashboard" target="_blank">🖥 打开驾驶舱</a>
+      <a class="btn btn-blue" href="/community/alerts" target="_blank">📋 打开工单看板</a>
+      <a class="btn btn-ghost" href="/family/overview" target="_blank">👨‍💼 查看子女端</a>
+      <a class="btn btn-ghost" href="/volunteer/tasks" target="_blank">🙋 志愿者端</a>
+    </div>
+  </div>
+
+  <div class="card mt-16">
+    <div class="card-title">建议演示动线（对应规格书答辩脚本）</div>
+    <ol style="padding-left:20px;line-height:2">
+      <li>先打开<b>子女端总览</b>：一切平安，绿色状态</li>
+      <li>回到本页点 <b>「夜间跌倒」</b> → 切到<b>驾驶舱</b>（5 秒内红点脉冲 + 跑马灯滚动）</li>
+      <li>进入<b>工单看板</b> → 待核实列出现红色工单 → 点"派单"选志愿者赵敏</li>
+      <li>切到<b>志愿者端</b> → 出现任务 → 到场打卡 → 上传回执归档</li>
+      <li>回到<b>子女端</b>：预警变"已归档"，状态回落平安 —— 闭环完成 ✅</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+async function trigger(scenario) {
+  const box = document.getElementById('sim-result');
+  box.innerHTML = '<span class="muted">⏳ 注入数据中…</span>';
+  if (window.showToast) window.showToast('正在注入演示数据…', 'info', 1600);
+  try {
+    const r = await fetch('/api/simulator/trigger', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario })
+    });
+    if (!r.ok) throw new Error('request failed');
+    const d = await r.json();
+    box.innerHTML = d.ok
+      ? `<div class="alert-item level-red"><div class="a-main">
+           <div class="a-title">✅ 场景已注入</div>
+           <div class="a-meta">${d.msg}</div>
+           <div class="a-meta">请切到 <a href="/community/dashboard" target="_blank">驾驶舱</a> /
+              <a href="/community/alerts" target="_blank">工单看板</a> 查看效果（5 秒内自动刷新）</div>
+         </div></div>`
+      : `<div class="alert-item level-yellow"><div class="a-main"><div class="a-title">⚠ ${d.msg}</div></div></div>`;
+    if (window.showToast) window.showToast(d.ok ? '演示场景已注入' : d.msg, d.ok ? 'success' : 'error');
+  } catch (e) {
+    box.innerHTML = '<div class="alert-item level-yellow"><div class="a-main"><div class="a-title">⚠ 注入失败</div><div class="a-meta">请检查服务是否正在运行，然后重试。</div></div></div>';
+    if (window.showToast) window.showToast('注入失败，请重试', 'error');
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}老人档案 · 三个清单 · 安芯{% endblock %}
+{% block content %}
+<div class="page">
+
+  <div class="tabs">
+    <a href="/community/elders" class="{{ 'active' if not current_level }}">
+      对象清单 <small>民政部《探访关爱服务通知》· 独居/空巢/高龄老人台账</small>
+    </a>
+    <a href="#needs">需求清单 <small>助餐 / 助医 / 改造 / 保洁</small></a>
+    <a href="#services">服务清单 <small>已对接 provider 的在执行服务</small></a>
+  </div>
+
+  <div class="flex-between" style="margin-bottom:14px">
+    <div class="flex">
+      <a class="btn btn-sm {{ '' if not current_level else 'btn-ghost' }}" href="/community/elders">全部</a>
+      <a class="btn btn-sm {{ 'btn-red' if current_level == 'red' else 'btn-ghost' }}" href="/community/elders?level=red">紧急</a>
+      <a class="btn btn-sm {{ '' if current_level == 'yellow' else 'btn-ghost' }}" style="{{ 'background:var(--yellow)' if current_level == 'yellow' }}" href="/community/elders?level=yellow">需关注</a>
+      <a class="btn btn-sm {{ '' if current_level == 'green' else 'btn-ghost' }}" style="{{ 'background:var(--green)' if current_level == 'green' }}" href="/community/elders?level=green">平安</a>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="alert('演示：导出 Excel（待接入后端导出接口）')">⬇ 导出 Excel</button>
+  </div>
+
+  <!-- 对象清单 -->
+  <table class="table">
+    <thead>
+      <tr>
+        <th>姓名</th><th>年龄</th><th>住址</th><th>风险等级</th><th>最近打卡</th>
+        <th>设备状态</th><th>下次应访</th><th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in elders %}
+      <tr class="{{ 'row-red' if e.risk_level == 'red' }}">
+        <td><b>{{ e.name }}</b>{% if e.live_alone %} <span class="muted" style="font-size:12px">独居</span>{% endif %}</td>
+        <td>{{ e.age }}</td>
+        <td>{{ e.address }}</td>
+        <td><span class="badge badge-{{ e.risk_level }}">{{ level_text[e.risk_level] }}</span></td>
+        <td class="muted">{{ e.last_checkin[-5:] if e.last_checkin else '—' }}</td>
+        <td class="muted" style="font-size:12px">{{ e.devices[:14] }}…</td>
+        <td>
+          {% set overdue = e.next_visit_due and e.next_visit_due < today %}
+          {% if overdue %}<span class="status-chip status-pending">已超期 {{ e.next_visit_due }}</span>
+          {% else %}{{ e.next_visit_due }}{% endif %}
+        </td>
+        <td><a href="/community/alerts" class="btn btn-sm btn-ghost">派单</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- 需求清单 -->
+  <div class="card mt-16" id="needs">
+    <div class="card-title">需求清单（网格员探访 / 老人上报 归集）</div>
+    <table class="table">
+      <thead><tr><th>老人</th><th>类型</th><th>需求描述</th><th>紧急度</th><th>状态</th></tr></thead>
+      <tbody>
+        {% for n in needs if n.status != '已完成' %}
+        <tr>
+          <td><b>{{ n.elder_name }}</b></td>
+          <td>{{ {'meal':'助餐','medical':'助医','renovation':'适老化改造','housekeeping':'保洁'}[n.category] }}</td>
+          <td>{{ n.descr }}</td>
+          <td>{% if n.urgency == 'high' %}<span class="status-chip status-pending">高</span>{% else %}<span class="status-chip">普通</span>{% endif %}</td>
+          <td><span class="status-chip {{ 'status-dispatched' if n.status == '已转服务' }}">{{ n.status }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 服务清单 -->
+  <div class="card mt-16" id="services">
+    <div class="card-title">服务清单（已对接 provider · 执行中）</div>
+    <table class="table">
+      <thead><tr><th>老人</th><th>服务内容</th><th>承接方</th><th>状态</th></tr></thead>
+      <tbody>
+        {% for n in needs if n.status in ('已转服务', '已完成') %}
+        <tr>
+          <td><b>{{ n.elder_name }}</b></td>
+          <td>{{ n.descr }}</td>
+          <td>{{ n.provider or '—' }}</td>
+          <td><span class="status-chip {{ 'status-closed' if n.status == '已完成' else 'status-processing' }}">{{ n.status }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">暂无在执行服务</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="muted" style="font-size:12px;margin-top:10px">
+      "三个清单"依据：民政部、全国老龄办、中国老龄协会《关于深入开展特殊困难老年人探访关爱服务的通知》（2026-10-30）
+    </p>
+  </div>
+</div>
+{% endblock %}

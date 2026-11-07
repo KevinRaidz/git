@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}安芯 · 独居老人守护平台{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
+  {% block css %}{% endblock %}
+</head>
+<body class="{% block bodyclass %}{% endblock %}">
+
+<a class="skip-link" href="#main-content">跳到主要内容</a>
+
+{% if role and role != 'elder' %}
+<nav class="topnav">
+  <div class="nav-brand" aria-label="安芯，独居老人守护平台">
+    <span class="brand-wordmark" aria-hidden="true"><span class="brand-an">安</span><span class="brand-xin">芯</span></span>
+    <span class="brand-subtitle">独居老人守护平台</span>
+  </div>
+  <div class="nav-links">
+    {% if role == 'family' %}
+      <a href="/family/overview">爸妈总览</a>
+    {% endif %}
+    {% if role == 'community' %}
+      <a href="/community/dashboard">安全驾驶舱</a>
+      <a href="/community/elders">老人档案 · 三个清单</a>
+      <a href="/community/alerts">预警工单</a>
+      <a href="/demo/simulator" style="color:var(--brand)">⚙ 演示模拟器</a>
+    {% endif %}
+    {% if role == 'volunteer' %}
+      <a href="/volunteer/tasks">我的任务</a>
+    {% endif %}
+  </div>
+  <span class="nav-user">{{ role_name }} · <a href="/login">切换角色</a></span>
+</nav>
+{% endif %}
+
+<div id="main-content" tabindex="-1">
+{% block content %}{% endblock %}
+</div>
+{% block js %}{% endblock %}
+<div id="app-toast" class="app-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+<script src="{{ url_for('static', filename='js/interactions.js') }}" defer></script>
+</body>
+</html>

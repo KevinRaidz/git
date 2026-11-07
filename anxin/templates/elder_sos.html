@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}紧急求助 · 安芯{% endblock %}
+{% block css %}<link rel="stylesheet" href="/static/css/elder.css">{% endblock %}
+{% block bodyclass %}sos-page{% endblock %}
+{% block content %}
+
+<!-- 阶段一：长按确认 -->
+<section class="sos-stage active" id="stage-hold">
+  <h1>请长按下方按钮呼救</h1>
+  <button class="e-sos" id="btn-hold-sos" aria-label="长按三秒呼救">
+    <span class="progress" id="hold-progress"></span>
+    🆘 长 按 呼 救
+  </button>
+  <p style="margin-top:36px"><a href="/elder/home" style="color:#fff;font-size:26px">← 返回</a></p>
+</section>
+
+<!-- 阶段二：5 秒倒计时（可取消） -->
+<section class="sos-stage" id="stage-count">
+  <h1>即将通知家人和社区</h1>
+  <div class="sos-count-num" id="count-num">5</div>
+  <div class="sos-sub">点错了？下方按钮可取消</div>
+  <button class="sos-cancel" onclick="cancelSos()">我 按 错 了</button>
+</section>
+
+<!-- 阶段三：已发送 -->
+<section class="sos-stage" id="stage-sent">
+  <h1>✅ 求救已发出</h1>
+  <div class="sos-notified" id="notified-list" aria-live="polite">正在通知家人和社区…</div>
+
+  <div class="med-card">
+    <h2>急 救 信 息 卡</h2>
+    <p><b>姓名</b>{{ elder.name }} · {{ elder.age }} 岁</p>
+    <p><b>血型</b>{{ elder.blood_type }}</p>
+    <p><b>慢病</b>{{ elder.chronic }}</p>
+    <p><b>过敏</b>{{ elder.allergy }}</p>
+    <p><b>住址</b>{{ elder.address }}</p>
+    <p><b>紧急联系人</b>{{ elder.emergency_contact }} {{ elder.emergency_phone }}</p>
+  </div>
+
+  <div class="sos-sub">正在接通社区值班电话…</div>
+  <button class="sos-cancel" style="background:var(--yellow);margin-top:24px" onclick="speak('已接通值班电话，请说话')">📞 免提通话</button>
+</section>
+
+<script>
+function speak(text) {
+  try { const u = new SpeechSynthesisUtterance(text); u.lang = 'zh-CN'; u.rate = .85; speechSynthesis.speak(u); } catch (e) {}
+}
+function show(id) {
+  document.querySelectorAll('.sos-stage').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+/* 阶段一：长按 3 秒 */
+(function () {
+  const btn = document.getElementById('btn-hold-sos');
+  const bar = document.getElementById('hold-progress');
+  let timer = null, p = 0;
+  btn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    timer = setInterval(() => {
+      p += 2; bar.style.width = p + '%';
+      if (p >= 100) { clearInterval(timer); startCountdown(); }
+    }, 60);
+  });
+  const cancel = () => { clearInterval(timer); p = 0; bar.style.width = '0'; };
+  btn.addEventListener('pointerup', cancel);
+  btn.addEventListener('pointerleave', cancel);
+  btn.addEventListener('pointercancel', cancel);
+})();
+
+/* 阶段二：5 秒倒计时 */
+let cdTimer = null;
+function startCountdown() {
+  show('stage-count');
+  let n = 5;
+  document.getElementById('count-num').innerText = n;
+  speak('即将发出求救');
+  if (window.showToast) window.showToast('倒计时开始，可随时取消', 'info', 1800);
+  cdTimer = setInterval(() => {
+    n--;
+    document.getElementById('count-num').innerText = n;
+    if (n <= 0) { clearInterval(cdTimer); sendSos(); }
+  }, 1000);
+}
+function cancelSos() {
+  clearInterval(cdTimer);
+  show('stage-hold');
+  speak('已取消');
+  if (window.showToast) window.showToast('已取消求救', 'success');
+}
+
+/* 阶段三：发送 */
+function sendSos() {
+  show('stage-sent');
+  fetch('/api/sos', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        document.getElementById('notified-list').innerHTML =
+          '已通知：<br>' + d.notified.join('<br>');
+        speak('求救已发出，家人和社区马上就来，请保持镇定');
+        if (window.showToast) window.showToast('求救已发出，正在通知联系人', 'success', 4000);
+      }
+    });
+}
+</script>
+{% endblock %}

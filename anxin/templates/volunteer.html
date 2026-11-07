@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}我的任务 · 安芯{% endblock %}
+{% block content %}
+<div class="page" style="max-width:720px">
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="flex">
+      <div style="width:56px;height:56px;border-radius:50%;background:var(--brand-light);display:flex;align-items:center;justify-content:center;font-size:28px">🙋‍♀️</div>
+      <div>
+        <b style="font-size:16px">赵敏 · 银龄互助志愿者</b>
+        <div class="muted" style="font-size:12px">本月已服务 12 次 · 积分 360 · 排名社区第 2</div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin:12px 0">待办任务</h3>
+  {% for t in tasks %}
+  <div class="alert-item level-{{ t.level }}" style="flex-direction:column">
+    <div class="flex-between" style="width:100%">
+      <span class="a-title">{{ t.elder_name }}（{{ t.age }}岁）· {{ '紧急' if t.level == 'red' else '关注' }}</span>
+      <span class="status-chip status-{{ t.status }}">{{ status_text[t.status] }}</span>
+    </div>
+    <div class="a-meta" style="width:100%">📍 {{ t.address }} · 距您 {{ [320, 450, 780][loop.index0 % 3] }}m</div>
+    <div class="a-meta" style="width:100%">{{ t.reason }}</div>
+    <div class="flex" style="margin-top:8px">
+      {% if t.status == 'dispatched' %}
+      <button class="btn btn-sm btn-blue" onclick="arrive({{ t.id }})">📍 到场打卡（需 GPS 校验）</button>
+      {% elif t.status == 'processing' %}
+      <button class="btn btn-sm" style="background:var(--green)" onclick="finish({{ t.id }})">✅ 上传回执并归档</button>
+      {% endif %}
+      <button class="btn btn-sm btn-ghost" onclick="alert('演示：唤起地图导航')">🧭 导航</button>
+    </div>
+  </div>
+  {% else %}
+  <p class="muted">当前没有待办任务 🎉</p>
+  {% endfor %}
+
+  <h3 style="margin:20px 0 12px">最近完成</h3>
+  {% for t in done %}
+  <div class="alert-item" style="border-left:4px solid var(--green)">
+    <div class="a-main">
+      <div class="a-title">{{ t.elder_name }} · 已归档</div>
+      <div class="a-meta">{{ t.result or '' }}</div>
+    </div>
+  </div>
+  {% else %}
+  <p class="muted">暂无历史记录</p>
+  {% endfor %}
+</div>
+
+<script>
+/* 到场打卡：浏览器地理定位，距目标 <100m 才允许（演示环境放宽） */
+function arrive(id) {
+  if (!navigator.geolocation) return finishStep(id, 'arrive');
+  navigator.geolocation.getCurrentPosition(
+    pos => finishStep(id, 'arrive', pos.coords.latitude.toFixed(4) + ',' + pos.coords.longitude.toFixed(4)),
+    () => finishStep(id, 'arrive'), { timeout: 3000 });
+}
+
+async function finishStep(id, action, loc) {
+  if (action === 'arrive') {
+    if (!confirm('到场打卡：确认已抵达老人家中？\n（定位 ' + (loc || '浏览器未授权，已放行（演示）') + '）')) return;
+    await post(`/api/alerts/${id}/process`, {});
+  } else {
+    const note = prompt('回执备注（语音转文字待接入）：', '已上门探访，老人精神状态良好，已提醒按时服药');
+    if (note === null) return;
+    await post(`/api/alerts/${id}/close`, { result: note });
+  }
+  location.reload();
+}
+
+function finish(id) { finishStep(id, 'close'); }
+
+async function post(url, body) {
+  await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+}
+</script>
+{% endblock %}

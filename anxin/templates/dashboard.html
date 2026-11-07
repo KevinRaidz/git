@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}安全驾驶舱 · 安芯{% endblock %}
+{% block css %}<link rel="stylesheet" href="/static/css/dashboard.css">{% endblock %}
+{% block bodyclass %}dashboard-page{% endblock %}
+{% block content %}
+
+<div class="screen" id="screen">
+  <!-- 顶栏 -->
+  <div class="d-top">
+    <h1><span>安芯</span>幸福里社区 · 安全驾驶舱</h1>
+    <div class="meta">
+      <span><i class="d-dot"></i>在线设备 <b id="kpi-devices">--</b></span>
+      <span id="kpi-time">--</span>
+    </div>
+  </div>
+
+  <!-- 左列：风险分级 + 探访完成率 -->
+  <div class="d-left">
+    <div class="panel">
+      <h3>风险分级</h3>
+      <div id="chart-risk" class="chart"></div>
+      <div class="risk-legend">
+        <div><i style="background:#4C9A6A"></i>平安 <b id="n-green">--</b> 人</div>
+        <div><i style="background:#E0A030"></i>需关注 <b id="n-yellow">--</b> 人</div>
+        <div><i style="background:#D2453C"></i>紧急 <b id="n-red">--</b> 人</div>
+      </div>
+    </div>
+    <div class="panel" style="min-height:180px">
+      <h3>本周探访完成率</h3>
+      <div class="kpi-big" id="kpi-visit">--%</div>
+      <div class="visit-bar"><i id="visit-bar" style="width:0"></i></div>
+      <div style="color:#7E9CBF" id="visit-text">--</div>
+      <div style="color:#FF8F86;margin-top:8px;font-size:13px" id="overdue-text">超期 -- 户</div>
+    </div>
+  </div>
+
+  <!-- 中央：示意图地图 -->
+  <div class="panel d-map">
+    <h3>辖区老人点位（示意地图）</h3>
+    <div class="grid-bg"></div>
+    <div id="map-layer" style="position:absolute;inset:0"></div>
+    <div id="map-status" class="sr-only" aria-live="polite"></div>
+    <div class="map-legend">● 平安　▲ 需关注　◉ 脉冲=实时预警（点击查看）</div>
+  </div>
+
+  <!-- 右列：趋势 + 工单状态 -->
+  <div class="d-right">
+    <div class="panel">
+      <h3>近 24h 预警趋势</h3>
+      <div id="chart-trend" class="chart"></div>
+    </div>
+    <div class="panel">
+      <h3>工单状态</h3>
+      <div id="chart-status" class="chart"></div>
+      <div style="color:#7E9CBF;font-size:13px">平均响应时长 <b style="color:#fff">6.4</b> 分钟（演示数据）</div>
+    </div>
+  </div>
+
+  <!-- 底部：预警跑马灯 -->
+  <div class="d-marquee">
+    <span class="m-label">⚠ 实时预警</span>
+    <div class="marquee-window">
+      <div class="marquee-track" id="marquee">加载中…</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script>
+/* ---------- 大屏等比缩放（1920×1080 基准） ---------- */
+function fitScreen() {
+  const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+  const el = document.getElementById('screen');
+  el.style.transform = 'scale(' + s + ')';
+  el.style.marginLeft = Math.max(0, (innerWidth - 1920 * s) / 2) + 'px';
+  document.body.style.height = '100vh'; document.body.style.overflow = 'hidden';
+}
+window.addEventListener('resize', fitScreen); fitScreen();
+
+/* ---------- 图表初始化 ---------- */
+const chartRisk = echarts.init(document.getElementById('chart-risk'));
+const chartTrend = echarts.init(document.getElementById('chart-trend'));
+const chartStatus = echarts.init(document.getElementById('chart-status'));
+const AX = { axisLabel: { color: '#7E9CBF' }, axisLine: { lineStyle: { color: '#22344B' } },
+             splitLine: { lineStyle: { color: 'rgba(94,164,255,.12)' } } };
+
+/* ---------- 数据拉取与渲染（每 5 秒轮询，可升级 SSE） ---------- */
+async function load() {
+  const d = await (await fetch('/api/dashboard')).json();
+  const k = d.kpi;
+
+  document.getElementById('kpi-devices').innerText = k.devices_online + '/' + k.devices_total;
+  document.getElementById('kpi-time').innerText = d.last_update;
+  ['green', 'yellow', 'red'].forEach(l => document.getElementById('n-' + l).innerText = k[l]);
+  const pct = Math.round(k.visit_done / k.visit_due * 100);
+  document.getElementById('kpi-visit').innerText = pct + '%';
+  document.getElementById('visit-bar').style.width = pct + '%';
+  document.getElementById('visit-text').innerText = '已访 ' + k.visit_done + ' / 应访 ' + k.visit_due;
+  document.getElementById('overdue-text').innerText = '超期 3 户 · 每两周至少探访 1 次（民政部要求）';
+
+  /* 风险环形 */
+  chartRisk.setOption({
+    series: [{
+      type: 'pie', radius: ['58%', '78%'], center: ['50%', '50%'],
+      label: { show: true, position: 'center', formatter: k.total + '\n在册老人',
+               fontSize: 18, color: '#fff', lineHeight: 26 },
+      data: [
+        { value: k.green, name: '平安', itemStyle: { color: '#4C9A6A' } },
+        { value: k.yellow, name: '需关注', itemStyle: { color: '#E0A030' } },
+        { value: k.red, name: '紧急', itemStyle: { color: '#D2453C' } },
+      ]
+    }]
+  });
+
+  /* 24h 趋势（4 小时一桶） */
+  chartTrend.setOption({
+    grid: { left: 34, right: 10, top: 14, bottom: 24 },
+    xAxis: Object.assign({ type: 'category', data: ['-24h', '-20h', '-16h', '-12h', '-8h', '-4h', '现在'] }, AX),
+    yAxis: Object.assign({ type: 'value' }, AX),
+    series: [{ type: 'line', smooth: true, data: d.trend.concat([d.trend[d.trend.length - 1] || 0]),
+               areaStyle: { color: 'rgba(94,164,255,.15)' }, lineStyle: { color: '#5EA4FF', width: 2 },
+               itemStyle: { color: '#5EA4FF' } }]
+  });
+
+  /* 工单状态条形 */
+  const sc = d.status_counts;
+  chartStatus.setOption({
+    grid: { left: 60, right: 30, top: 8, bottom: 24 },
+    xAxis: Object.assign({ type: 'value' }, AX),
+    yAxis: Object.assign({ type: 'category',
+      data: ['已归档', '处置中', '已派单', '待核实'] }, AX),
+    series: [{ type: 'bar', barWidth: 14,
+      data: [
+        { value: sc.closed || 0, itemStyle: { color: '#4C9A6A', borderRadius: [0, 24, 24, 0] } },
+        { value: sc.processing || 0, itemStyle: { color: '#5EA4FF', borderRadius: [0, 24, 24, 0] } },
+        { value: sc.dispatched || 0, itemStyle: { color: '#E0A030', borderRadius: [0, 24, 24, 0] } },
+        { value: sc.pending || 0, itemStyle: { color: '#D2453C', borderRadius: [0, 24, 24, 0] } },
+      ], label: { show: true, position: 'right', color: '#DCE9F7' } }]
+  });
+
+  /* 地图点位 */
+  const layer = document.getElementById('map-layer');
+  layer.innerHTML = '';
+  d.points.forEach(p => {
+    const dot = document.createElement('div');
+    const levelLabel = ({ green: '平安', yellow: '需关注', red: '⚠ 紧急' })[p.level];
+    dot.className = 'map-dot ' + p.level;
+    dot.style.left = p.x + '%'; dot.style.top = p.y + '%';
+    dot.tabIndex = 0;
+    dot.setAttribute('role', 'button');
+    dot.setAttribute('aria-label', p.name + '，' + p.age + ' 岁，' + levelLabel);
+    dot.innerHTML = '<span class="tip">' + p.name + ' · ' + p.age + ' 岁 · ' + levelLabel + '</span>';
+    const selectDot = () => {
+      layer.querySelectorAll('.map-dot.is-selected').forEach(item => item.classList.remove('is-selected'));
+      dot.classList.add('is-selected');
+      const status = document.getElementById('map-status');
+      if (status) status.textContent = p.name + '，' + p.age + ' 岁，当前状态：' + levelLabel;
+      if (window.showToast) window.showToast(p.name + ' · ' + levelLabel, p.level === 'red' ? 'error' : 'info', 2200);
+    };
+    dot.addEventListener('click', selectDot);
+    dot.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectDot(); }
+    });
+    layer.appendChild(dot);
+  });
+
+  /* 跑马灯 */
+  document.getElementById('marquee').innerText =
+    d.recent_alerts.map(a => a.created_at + '　' + a.elder + '（' + a.age + '岁）' +
+      (a.level === 'red' ? '【紧急】' : '【关注】') + a.reason +
+      (a.assignee ? ' → ' + a.assignee : '')).join('　　　◆　　　');
+}
+
+load();
+setInterval(load, 5000);
+</script>
+{% endblock %}
