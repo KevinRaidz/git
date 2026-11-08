@@ -11,6 +11,7 @@
     <div class="meta">
       <span><i class="d-dot"></i>在线设备 <b id="kpi-devices">--</b></span>
       <span id="kpi-time">--</span>
+      <span class="d-connection" id="connection-state" data-state="loading" role="status" aria-live="polite">正在连接</span>
     </div>
   </div>
 
@@ -59,11 +60,13 @@
   <!-- 底部：预警跑马灯 -->
   <div class="d-marquee">
     <span class="m-label">⚠ 实时预警</span>
-    <div class="marquee-window">
+    <div class="marquee-window" tabindex="0" aria-label="实时预警信息；聚焦或悬停可暂停滚动">
       <div class="marquee-track" id="marquee">加载中…</div>
     </div>
   </div>
 </div>
+
+<div id="map-info-tooltip" class="map-info-tooltip" role="tooltip" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <script>
@@ -81,13 +84,51 @@ window.addEventListener('resize', fitScreen); fitScreen();
 const chartRisk = echarts.init(document.getElementById('chart-risk'));
 const chartTrend = echarts.init(document.getElementById('chart-trend'));
 const chartStatus = echarts.init(document.getElementById('chart-status'));
+const mapInfoTooltip = document.getElementById('map-info-tooltip');
 const AX = { axisLabel: { color: '#7E9CBF' }, axisLine: { lineStyle: { color: '#22344B' } },
              splitLine: { lineStyle: { color: 'rgba(94,164,255,.12)' } } };
+const TOOLTIP = {
+  backgroundColor: 'rgba(15, 28, 45, .96)', borderColor: 'rgba(127, 170, 218, .28)',
+  borderWidth: 1, textStyle: { color: '#E8F1FC', fontSize: 13 }, padding: [10, 13],
+  extraCssText: 'border-radius:12px;box-shadow:0 14px 36px rgba(0,0,0,.28);'
+};
+
+function showMapInfo(dot) {
+  if (!dot || !dot.isConnected) return;
+  mapInfoTooltip.textContent = dot.getAttribute('aria-label');
+  mapInfoTooltip.hidden = false;
+  const rect = dot.getBoundingClientRect();
+  const tipRect = mapInfoTooltip.getBoundingClientRect();
+  const rightX = rect.right + 14;
+  const leftX = rect.left - tipRect.width - 14;
+  const x = rightX + tipRect.width <= innerWidth - 12
+    ? rightX
+    : Math.max(12, leftX);
+  const minY = tipRect.height / 2 + 12;
+  const maxY = innerHeight - minY;
+  const y = Math.min(Math.max(rect.top + rect.height / 2, minY), maxY);
+  mapInfoTooltip.style.left = `${x}px`;
+  mapInfoTooltip.style.top = `${y}px`;
+  requestAnimationFrame(() => mapInfoTooltip.classList.add('is-visible'));
+}
+
+function hideMapInfo() {
+  mapInfoTooltip.classList.remove('is-visible');
+  window.setTimeout(() => {
+    if (!mapInfoTooltip.classList.contains('is-visible')) mapInfoTooltip.hidden = true;
+  }, 180);
+}
 
 /* ---------- 数据拉取与渲染（每 5 秒轮询，可升级 SSE） ---------- */
 async function load() {
-  const d = await (await fetch('/api/dashboard')).json();
+  const state = document.getElementById('connection-state');
+  try {
+  const response = await fetch('/api/dashboard', { cache: 'no-store' });
+  if (!response.ok) throw new Error('dashboard request failed');
+  const d = await response.json();
   const k = d.kpi;
+  state.dataset.state = 'ready';
+  if (state.textContent !== '实时同步') state.textContent = '实时同步';
 
   document.getElementById('kpi-devices').innerText = k.devices_online + '/' + k.devices_total;
   document.getElementById('kpi-time').innerText = d.last_update;
@@ -100,6 +141,10 @@ async function load() {
 
   /* 风险环形 */
   chartRisk.setOption({
+    animationDuration: 650,
+    animationDurationUpdate: 520,
+    tooltip: { ...TOOLTIP, trigger: 'item', formatter: p => `${p.name}：${p.value} 人（${p.percent}%）` },
+    aria: { enabled: true, description: '辖区老人风险等级分布，按平安、需关注、紧急分类。' },
     series: [{
       type: 'pie', radius: ['58%', '78%'], center: ['50%', '50%'],
       label: { show: true, position: 'center', formatter: k.total + '\n在册老人',
@@ -114,10 +159,15 @@ async function load() {
 
   /* 24h 趋势（4 小时一桶） */
   chartTrend.setOption({
+    animationDuration: 650,
+    animationDurationUpdate: 520,
+    tooltip: { ...TOOLTIP, trigger: 'axis', axisPointer: { type: 'line', lineStyle: { color: '#89B9F1', type: 'dashed' } } },
+    aria: { enabled: true, description: '过去24小时预警数量变化趋势。' },
     grid: { left: 34, right: 10, top: 14, bottom: 24 },
     xAxis: Object.assign({ type: 'category', data: ['-24h', '-20h', '-16h', '-12h', '-8h', '-4h', '现在'] }, AX),
     yAxis: Object.assign({ type: 'value' }, AX),
-    series: [{ type: 'line', smooth: true, data: d.trend.concat([d.trend[d.trend.length - 1] || 0]),
+    series: [{ type: 'line', smooth: .42, showSymbol: false, emphasis: { focus: 'series', scale: 1.5 },
+               data: d.trend.concat([d.trend[d.trend.length - 1] || 0]),
                areaStyle: { color: 'rgba(94,164,255,.15)' }, lineStyle: { color: '#5EA4FF', width: 2 },
                itemStyle: { color: '#5EA4FF' } }]
   });
@@ -125,6 +175,10 @@ async function load() {
   /* 工单状态条形 */
   const sc = d.status_counts;
   chartStatus.setOption({
+    animationDuration: 650,
+    animationDurationUpdate: 520,
+    tooltip: { ...TOOLTIP, trigger: 'axis', axisPointer: { type: 'shadow' } },
+    aria: { enabled: true, description: '预警工单数量，按已归档、处置中、已派单、待核实分类。' },
     grid: { left: 60, right: 30, top: 8, bottom: 24 },
     xAxis: Object.assign({ type: 'value' }, AX),
     yAxis: Object.assign({ type: 'category',
@@ -140,36 +194,67 @@ async function load() {
 
   /* 地图点位 */
   const layer = document.getElementById('map-layer');
-  layer.innerHTML = '';
+  const existingDots = new Map(Array.from(layer.children, dot => [dot.dataset.id, dot]));
+  const activeIds = new Set();
   d.points.forEach(p => {
-    const dot = document.createElement('div');
+    const id = String(p.id);
+    activeIds.add(id);
+    let dot = existingDots.get(id);
+    if (!dot) {
+      dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = 'map-dot';
+      dot.dataset.id = id;
+      dot.addEventListener('click', () => {
+        layer.querySelectorAll('.map-dot.is-selected').forEach(item => item.classList.remove('is-selected'));
+        dot.classList.add('is-selected');
+        showMapInfo(dot);
+        const status = document.getElementById('map-status');
+        if (status) status.textContent = dot.getAttribute('aria-label');
+        if (window.showToast) window.showToast(dot.getAttribute('aria-label'), dot.dataset.level === 'red' ? 'error' : 'info', 2200);
+      });
+      dot.addEventListener('pointerenter', () => showMapInfo(dot));
+      dot.addEventListener('pointerleave', () => { if (!dot.classList.contains('is-selected') && !dot.matches(':focus')) hideMapInfo(); });
+      dot.addEventListener('focus', () => showMapInfo(dot));
+      dot.addEventListener('blur', () => { if (!dot.classList.contains('is-selected') && !dot.matches(':hover')) hideMapInfo(); });
+    }
     const levelLabel = ({ green: '平安', yellow: '需关注', red: '⚠ 紧急' })[p.level];
-    dot.className = 'map-dot ' + p.level;
+    dot.classList.toggle('green', p.level === 'green');
+    dot.classList.toggle('yellow', p.level === 'yellow');
+    dot.classList.toggle('red', p.level === 'red');
+    dot.dataset.level = p.level;
     dot.style.left = p.x + '%'; dot.style.top = p.y + '%';
-    dot.tabIndex = 0;
-    dot.setAttribute('role', 'button');
     dot.setAttribute('aria-label', p.name + '，' + p.age + ' 岁，' + levelLabel);
-    dot.innerHTML = '<span class="tip">' + p.name + ' · ' + p.age + ' 岁 · ' + levelLabel + '</span>';
-    const selectDot = () => {
-      layer.querySelectorAll('.map-dot.is-selected').forEach(item => item.classList.remove('is-selected'));
-      dot.classList.add('is-selected');
-      const status = document.getElementById('map-status');
-      if (status) status.textContent = p.name + '，' + p.age + ' 岁，当前状态：' + levelLabel;
-      if (window.showToast) window.showToast(p.name + ' · ' + levelLabel, p.level === 'red' ? 'error' : 'info', 2200);
-    };
-    dot.addEventListener('click', selectDot);
-    dot.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectDot(); }
-    });
-    layer.appendChild(dot);
+    if (!dot.isConnected) layer.appendChild(dot);
   });
+  existingDots.forEach((dot, id) => { if (!activeIds.has(id)) dot.remove(); });
+  const selectedDot = layer.querySelector('.map-dot.is-selected');
+  if (selectedDot) showMapInfo(selectedDot);
+  else hideMapInfo();
 
   /* 跑马灯 */
-  document.getElementById('marquee').innerText =
+  const marquee = document.getElementById('marquee');
+  const marqueeText =
     d.recent_alerts.map(a => a.created_at + '　' + a.elder + '（' + a.age + '岁）' +
       (a.level === 'red' ? '【紧急】' : '【关注】') + a.reason +
       (a.assignee ? ' → ' + a.assignee : '')).join('　　　◆　　　');
+  if (marquee.innerText !== marqueeText) marquee.innerText = marqueeText || '当前暂无预警，辖区状态平稳';
+  } catch (error) {
+    const wasDisconnected = state.dataset.state === 'error';
+    state.dataset.state = 'error';
+    if (state.textContent !== '连接中断') state.textContent = '连接中断';
+    if (!wasDisconnected && window.showToast) window.showToast('驾驶舱数据暂不可用，正在自动重试', 'error', 2400);
+  }
 }
+
+document.querySelector('.d-marquee').addEventListener('pointerenter', () => document.getElementById('marquee').classList.add('is-paused'));
+document.querySelector('.d-marquee').addEventListener('pointerleave', () => document.getElementById('marquee').classList.remove('is-paused'));
+document.querySelector('.d-marquee').addEventListener('focusin', () => document.getElementById('marquee').classList.add('is-paused'));
+document.querySelector('.d-marquee').addEventListener('focusout', () => document.getElementById('marquee').classList.remove('is-paused'));
+window.addEventListener('resize', () => {
+  const selectedDot = document.querySelector('.map-dot.is-selected');
+  if (selectedDot) showMapInfo(selectedDot);
+});
 
 load();
 setInterval(load, 5000);

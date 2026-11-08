@@ -12,9 +12,9 @@
 <a class="skip-link" href="#main-content">跳到主要内容</a>
 
 {% if role and role != 'elder' %}
-<nav class="topnav">
+<nav class="topnav{% if request.path == '/community/dashboard' %} topnav-dashboard{% endif %}">
   <div class="nav-brand" aria-label="安芯，独居老人守护平台">
-    <span class="brand-wordmark" aria-hidden="true"><span class="brand-an">安</span><span class="brand-xin">芯</span></span>
+    <span class="brand-wordmark" aria-hidden="true"><span class="brand-an"><svg class="brand-heart" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><path d="M50 28C60 28 72 14 82 14C92 14 100 28 94 44C88 60 64 88 50 88C36 88 12 60 6 44C0 28 8 14 18 14C28 14 40 28 50 28Z"/></svg>安</span><span class="brand-xin">芯</span></span>
     <span class="brand-subtitle">独居老人守护平台</span>
   </div>
   <div class="nav-links">
@@ -25,7 +25,7 @@
       <a href="/community/dashboard">安全驾驶舱</a>
       <a href="/community/elders">老人档案 · 三个清单</a>
       <a href="/community/alerts">预警工单</a>
-      <a href="/demo/simulator" style="color:var(--brand)">⚙ 演示模拟器</a>
+      <a href="/demo/simulator">⚙ 演示模拟器</a>
     {% endif %}
     {% if role == 'volunteer' %}
       <a href="/volunteer/tasks">我的任务</a>

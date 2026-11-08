@@ -10,81 +10,135 @@
     <a class="btn btn-sm" href="/demo/simulator">⚙ 打开演示模拟器</a>
   </div>
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">
-    <div>
-      <div class="card-title" style="color:var(--red)">🔴 待核实 <span id="cnt-pending" class="muted"></span></div>
-      <div id="col-pending"></div>
-    </div>
-    <div>
-      <div class="card-title" style="color:var(--yellow)">🟡 已派单 <span id="cnt-dispatched" class="muted"></span></div>
-      <div id="col-dispatched"></div>
-    </div>
-    <div>
-      <div class="card-title" style="color:var(--blue)">🔵 处置中 <span id="cnt-processing" class="muted"></span></div>
-      <div id="col-processing"></div>
-    </div>
-    <div>
-      <div class="card-title" style="color:var(--green)">🟢 已归档 <span id="cnt-closed" class="muted"></span></div>
-      <div id="col-closed"></div>
-    </div>
+  <div class="alerts-board" aria-label="预警工单状态看板">
+    <section class="alert-lane" aria-labelledby="lane-title-pending">
+      <h3 class="alert-lane-title tone-red" id="lane-title-pending">待核实 <span id="cnt-pending" class="lane-count" aria-label="工单数量">0</span></h3>
+      <div id="col-pending" class="alert-lane-list" aria-live="polite"></div>
+    </section>
+    <section class="alert-lane" aria-labelledby="lane-title-dispatched">
+      <h3 class="alert-lane-title tone-yellow" id="lane-title-dispatched">已派单 <span id="cnt-dispatched" class="lane-count" aria-label="工单数量">0</span></h3>
+      <div id="col-dispatched" class="alert-lane-list" aria-live="polite"></div>
+    </section>
+    <section class="alert-lane" aria-labelledby="lane-title-processing">
+      <h3 class="alert-lane-title tone-blue" id="lane-title-processing">处置中 <span id="cnt-processing" class="lane-count" aria-label="工单数量">0</span></h3>
+      <div id="col-processing" class="alert-lane-list" aria-live="polite"></div>
+    </section>
+    <section class="alert-lane" aria-labelledby="lane-title-closed">
+      <h3 class="alert-lane-title tone-green" id="lane-title-closed">已归档 <span id="cnt-closed" class="lane-count" aria-label="工单数量">0</span></h3>
+      <div id="col-closed" class="alert-lane-list" aria-live="polite"></div>
+    </section>
   </div>
 </div>
 
+<dialog class="order-dialog" id="order-dialog" aria-labelledby="order-dialog-title">
+  <div class="order-dialog-body">
+    <div class="order-dialog-kicker">工单流转</div>
+    <h2 id="order-dialog-title">更新工单</h2>
+    <label id="assignee-field" for="order-assignee">选择负责人</label>
+    <select id="order-assignee">
+      <option value="王芳">王芳 · 网格员，距 320m</option>
+      <option value="赵敏">赵敏 · 志愿者，距 450m</option>
+      <option value="物业老周">物业老周 · 距 600m</option>
+    </select>
+    <label id="result-field" for="order-result" hidden>填写处置结果（将同步子女端）</label>
+    <textarea id="order-result" rows="4" maxlength="300" hidden>已上门核实，老人一切安好</textarea>
+    <div class="order-dialog-actions">
+      <button type="button" class="btn btn-ghost" id="order-dialog-cancel">取消</button>
+      <button type="button" class="btn" id="order-dialog-save">确认更新</button>
+    </div>
+  </div>
+</dialog>
+
 <script>
 const LEVEL_TXT = { red: '紧急', yellow: '关注' };
-const ASSIGNEES = ['王芳（网格员）', '赵敏（志愿者）', '物业老周'];
+const STATUS_EMPTY = { pending: '暂无待核实工单', dispatched: '暂无已派工单', processing: '暂无处置中工单', closed: '暂无已归档工单' };
+const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 
 async function load() {
   try {
-    const d = await (await fetch('/api/alerts')).json();
+    const response = await fetch('/api/alerts', { cache: 'no-store' });
+    if (!response.ok) throw new Error('alerts request failed');
+    const d = await response.json();
     const cols = { pending: [], dispatched: [], processing: [], closed: [] };
     d.alerts.forEach(a => cols[a.status].push(a));
 
     Object.keys(cols).forEach(status => {
-      document.getElementById('cnt-' + status).innerText = '(' + cols[status].length + ')';
-      document.getElementById('col-' + status).innerHTML = cols[status].map(a => card(a, status)).join('');
+      document.getElementById('cnt-' + status).innerText = cols[status].length;
+      const markup = cols[status].map((a, index) => card(a, status, index)).join('') || `<p class="lane-empty">${STATUS_EMPTY[status]}</p>`;
+      const column = document.getElementById('col-' + status);
+      if (column.innerHTML !== markup) column.innerHTML = markup;
     });
   } catch (e) {
     if (window.showToast) window.showToast('工单刷新失败，请稍后重试', 'error');
   }
 }
 
-function card(a, status) {
+function card(a, status, index) {
   const acts = {
-    pending: `<button class="btn btn-sm" onclick="dispatch(${a.id})">电话核实</button>
-              <button class="btn btn-sm btn-blue" onclick="dispatch(${a.id})">派单</button>`,
+    pending: `<button class="btn btn-sm btn-blue" onclick="dispatch(${a.id})">派单并选择负责人</button>`,
     dispatched: `<button class="btn btn-sm btn-blue" onclick="process(${a.id})">开始处置</button>`,
     processing: `<button class="btn btn-sm" style="background:var(--green)" onclick="closeOrder(${a.id})">处置完成并归档</button>`,
     closed: '',
   }[status];
   return `
-  <div class="alert-item level-${a.level}" style="flex-direction:column">
+  <article class="alert-item is-interactive level-${a.level} alert-order" style="--order:${Math.min(index, 7)}">
     <div class="flex-between" style="width:100%">
-      <span class="a-title">${a.elder_name}（${a.age}岁）· ${LEVEL_TXT[a.level] || ''}</span>
-      <span class="muted" style="font-size:11px">${a.code}</span>
+      <span class="a-title">${escapeHTML(a.elder_name)}（${escapeHTML(a.age)}岁）· ${LEVEL_TXT[a.level] || ''}</span>
+      <span class="muted a-code">${escapeHTML(a.code)}</span>
     </div>
-    <div class="a-meta" style="width:100%">${a.reason}</div>
-    <div class="a-meta" style="width:100%">${a.created_at}${a.assignee ? ' · 负责人：' + a.assignee : ''}
-      ${a.result ? '<br>处置结果：' + a.result : ''}</div>
-    <div class="flex" style="margin-top:8px">${acts}</div>
-  </div>`;
+    <div class="a-meta alert-reason">${escapeHTML(a.reason)}</div>
+    <div class="a-meta">${escapeHTML(a.created_at)}${a.assignee ? ' · 负责人：' + escapeHTML(a.assignee) : ''}
+      ${a.result ? '<br>处置结果：' + escapeHTML(a.result) : ''}</div>
+    <div class="alert-actions">${acts}</div>
+  </article>`;
 }
 
-/* 派单：选择负责人 */
-function dispatch(id) {
-  const i = prompt('派单给（输入序号）：\n1. 王芳（网格员，距 320m）\n2. 赵敏（志愿者，距 450m）\n3. 物业老周（距 600m）', '1');
-  if (!i) return;
-  const assignee = ASSIGNEES[parseInt(i) - 1] ? ASSIGNEES[parseInt(i) - 1].split('（')[0] : '王芳';
-  post(`/api/alerts/${id}/dispatch`, { assignee });
+let pendingUpdate = null;
+const orderDialog = document.getElementById('order-dialog');
+const assigneeField = document.getElementById('assignee-field');
+const assigneeSelect = document.getElementById('order-assignee');
+const resultField = document.getElementById('result-field');
+const resultInput = document.getElementById('order-result');
+const saveButton = document.getElementById('order-dialog-save');
+
+function openOrderDialog(id, action) {
+  pendingUpdate = { id, action };
+  const assigning = action === 'dispatch';
+  document.getElementById('order-dialog-title').textContent = assigning ? '选择服务负责人' : '填写处置结果';
+  assigneeField.hidden = !assigning;
+  assigneeSelect.hidden = !assigning;
+  resultField.hidden = assigning;
+  resultInput.hidden = assigning;
+  saveButton.textContent = assigning ? '确认派单' : '完成并归档';
+  orderDialog.showModal();
+  window.requestAnimationFrame(() => (assigning ? assigneeSelect : resultInput).focus());
 }
+
+/* 派单采用可键盘操作的选择对话框，不再要求用户记序号。 */
+function dispatch(id) { openOrderDialog(id, 'dispatch'); }
 
 function process(id) { post(`/api/alerts/${id}/process`, {}); }
 
-function closeOrder(id) {
-  const result = prompt('处置结果（将同步子女端）：', '已上门核实，老人一切安好');
-  if (result === null) return;
-  post(`/api/alerts/${id}/close`, { result });
-}
+function closeOrder(id) { openOrderDialog(id, 'close'); }
+
+document.getElementById('order-dialog-cancel').addEventListener('click', () => orderDialog.close());
+saveButton.addEventListener('click', async () => {
+  if (!pendingUpdate) return;
+  const { id, action } = pendingUpdate;
+  const body = action === 'dispatch' ? { assignee: assigneeSelect.value } : { result: resultInput.value.trim() };
+  if (action === 'close' && !body.result) {
+    resultInput.setCustomValidity('请填写处置结果');
+    resultInput.reportValidity();
+    resultInput.addEventListener('input', () => resultInput.setCustomValidity(''), { once: true });
+    return;
+  }
+  saveButton.disabled = true;
+  saveButton.setAttribute('aria-busy', 'true');
+  const succeeded = await post(action === 'dispatch' ? `/api/alerts/${id}/dispatch` : `/api/alerts/${id}/close`, body);
+  saveButton.disabled = false;
+  saveButton.removeAttribute('aria-busy');
+  if (succeeded) { orderDialog.close(); pendingUpdate = null; }
+});
 
 async function post(url, body) {
   if (window.showToast) window.showToast('正在更新工单…', 'info', 1600);
@@ -93,8 +147,10 @@ async function post(url, body) {
     if (!response.ok) throw new Error('request failed');
     if (window.showToast) window.showToast('工单状态已更新');
     load();
+    return true;
   } catch (e) {
     if (window.showToast) window.showToast('更新失败，请重试', 'error');
+    return false;
   }
 }
 

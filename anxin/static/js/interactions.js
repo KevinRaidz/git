@@ -68,6 +68,80 @@
     }
   });
 
+  const topnav = document.querySelector('.topnav');
+  if (topnav) {
+    const islandSizeKey = 'anxin-island-size';
+    if (!reducedMotion) {
+      let previousSize = null;
+      try {
+        previousSize = JSON.parse(window.sessionStorage.getItem(islandSizeKey) || 'null');
+        window.sessionStorage.removeItem(islandSizeKey);
+      } catch (_) {
+        previousSize = null;
+      }
+
+      const targetRect = topnav.getBoundingClientRect();
+      const targetWidth = Math.round(targetRect.width);
+      const targetHeight = Math.round(targetRect.height);
+      const previousIsRecent = previousSize && Date.now() - previousSize.time < 10000;
+      const maxIslandWidth = Math.max(0, window.innerWidth - 16);
+      const previousWidth = previousIsRecent
+        ? Math.min(Math.round(previousSize.width), maxIslandWidth)
+        : targetWidth;
+      const sameWidth = previousIsRecent && Math.abs(previousWidth - targetWidth) <= 1;
+      const elasticPulse = Math.min(24, Math.max(8, Math.round(targetWidth * 0.04)));
+      const startWidth = sameWidth
+        ? Math.min(targetWidth + elasticPulse, maxIslandWidth)
+        : previousWidth;
+
+      if (previousIsRecent && startWidth > 0 && Math.abs(startWidth - targetWidth) > 1) {
+        topnav.classList.add('is-resizing');
+        topnav.style.transition = 'none';
+        topnav.style.width = `${startWidth}px`;
+        topnav.style.height = `${targetHeight}px`;
+        topnav.getBoundingClientRect();
+
+        let resizeTimer;
+        const finishResize = (event) => {
+          if (event && (event.target !== topnav || event.propertyName !== 'width')) return;
+          window.clearTimeout(resizeTimer);
+          topnav.removeEventListener('transitionend', finishResize);
+          topnav.style.removeProperty('transition');
+          topnav.style.removeProperty('width');
+          topnav.style.removeProperty('height');
+          topnav.classList.remove('is-resizing');
+        };
+        topnav.addEventListener('transitionend', finishResize);
+        resizeTimer = window.setTimeout(() => finishResize(), 1100);
+        window.requestAnimationFrame(() => {
+          topnav.style.removeProperty('transition');
+          topnav.style.width = `${targetWidth}px`;
+        });
+      }
+    }
+
+    if (!reducedMotion) topnav.addEventListener('click', (event) => {
+      const link = event.target.closest('.nav-links a[href], .nav-user a[href]');
+      if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if ((link.target && link.target !== '_self') || link.hasAttribute('download')) return;
+
+      const destination = new URL(link.href, window.location.href);
+      const destinationPath = destination.pathname.replace(/\/$/, '') || '/';
+      if (destination.origin !== window.location.origin) return;
+      if (destinationPath === currentPath && destination.search === window.location.search && destination.hash === window.location.hash) return;
+
+      const rect = topnav.getBoundingClientRect();
+      try {
+        window.sessionStorage.setItem(islandSizeKey, JSON.stringify({
+          width: Math.round(rect.width),
+          time: Date.now(),
+        }));
+      } catch (_) {
+        // Storage may be unavailable in private browsing; navigation remains unaffected.
+      }
+    });
+  }
+
   const toast = document.getElementById('app-toast');
   let toastTimer = null;
   window.showToast = (message, tone = 'success', duration = 2800) => {

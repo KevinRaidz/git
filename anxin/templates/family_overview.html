@@ -83,11 +83,19 @@ const avg = readings.slice(0, 6).reduce((a, b) => a + b, 0) / 6;
 
 const chart = echarts.init(document.getElementById('chart-activity'));
 chart.setOption({
+  animationDuration: 550,
+  animationDurationUpdate: 450,
+  tooltip: {
+    trigger: 'axis', axisPointer: { type: 'shadow' },
+    backgroundColor: 'rgba(255,255,255,.98)', borderColor: '#E8E2D6', borderWidth: 1,
+    textStyle: { color: '#2E2C28', fontSize: 13 }, padding: [10, 13],
+    extraCssText: 'border-radius:12px;box-shadow:0 12px 28px rgba(46,44,40,.12);'
+  },
   grid: { left: 34, right: 8, top: 16, bottom: 22 },
   xAxis: { type: 'category', data: days.map(d => d.slice(5)), axisLabel: { color: '#6B675C' } },
   yAxis: { type: 'value', axisLabel: { color: '#6B675C' }, splitLine: { lineStyle: { color: '#E8E2D6' } } },
   series: [{
-    type: 'bar', barWidth: 22,
+    type: 'bar', barWidth: 22, emphasis: { focus: 'series', itemStyle: { shadowBlur: 10, shadowColor: 'rgba(76,154,106,.2)' } },
     data: readings.map(v => ({
       value: v,
       itemStyle: { color: v < avg * 0.7 ? '#E0A030' : '#4C9A6A', borderRadius: [24, 24, 0, 0] }

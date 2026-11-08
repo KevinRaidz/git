@@ -1,7 +1,10 @@
 /* ============================================================
    安芯 · 社区驾驶舱（深色大屏 1920×1080 等比缩放）
    ============================================================ */
-body.dashboard-page { background: #0E1A2B; color: #DCE9F7; font-size: 14px; }
+body.dashboard-page {
+  background: radial-gradient(ellipse at 48% 42%, rgba(45, 86, 132, .12), transparent 62%), #0E1A2B;
+  color: #DCE9F7; font-size: 14px;
+}
 
 .screen {
   width: 1920px; height: 1080px;
@@ -16,6 +19,7 @@ body.dashboard-page { background: #0E1A2B; color: #DCE9F7; font-size: 14px; }
 .d-top {
   grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between;
   background: #132338; border: 1px solid rgba(94,164,255,.18); border-radius: var(--radius); padding: 0 28px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 10px 28px rgba(2,10,20,.12);
 }
 .d-top h1 { font-size: 26px; letter-spacing: 2px; color: #fff; }
 .d-top h1 span { color: #5EA4FF; margin-right: 14px; }
@@ -28,8 +32,33 @@ body.dashboard-page { background: #0E1A2B; color: #DCE9F7; font-size: 14px; }
   border: 1px solid rgba(94,164,255,.22);
   border-radius: var(--radius); padding: 18px;
   display: flex; flex-direction: column;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025), 0 12px 28px rgba(2,10,20,.10);
+  transition: border-color var(--motion-base) var(--ease-out), background var(--motion-base) var(--ease-out), transform var(--motion-base) var(--ease-out), box-shadow var(--motion-base) var(--ease-out);
+}
+.panel:hover, .panel:focus-within {
+  border-color: rgba(94,164,255,.4); background-color: rgba(94,164,255,.085);
+  transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 18px 36px rgba(2,10,20,.2);
 }
 .panel h3 { font-size: 16px; font-weight: 600; color: #A9C1DC; margin-bottom: 10px; }
+
+.d-top, .d-left, .d-map, .d-right, .d-marquee {
+  animation: dashboard-enter 620ms var(--ease-out) both;
+}
+.d-left { animation-delay: 70ms; }
+.d-map { animation-delay: 130ms; }
+.d-right { animation-delay: 190ms; }
+.d-marquee { animation-delay: 250ms; }
+@keyframes dashboard-enter {
+  from { opacity: 0; translate: 0 12px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+.d-connection { display: inline-flex; align-items: center; gap: 7px; color: #9CB4CE; font-size: 13px; }
+.d-connection::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #69C58A; box-shadow: 0 0 0 4px rgba(105,197,138,.12); }
+.d-connection[data-state="error"] { color: #FF9A91; }
+.d-connection[data-state="error"]::before { background: #EF7268; box-shadow: 0 0 0 4px rgba(239,114,104,.14); }
+.d-connection[data-state="loading"]::before { animation: connection-pulse 1.6s ease-in-out infinite; }
+@keyframes connection-pulse { 50% { box-shadow: 0 0 0 7px rgba(105,197,138,0); } }
 
 /* 左列 */
 .d-left { display: grid; grid-template-rows: 1fr auto; gap: 16px; }
@@ -53,6 +82,7 @@ body.dashboard-page { background: #0E1A2B; color: #DCE9F7; font-size: 14px; }
 }
 .map-dot {
   position: absolute; width: 14px; height: 14px; border-radius: 50%;
+  padding: 0; border: 0; appearance: none; color: inherit;
   transform: translate(-50%, -50%); cursor: pointer; z-index: 2;
   transition: transform .18s ease, filter .18s ease;
 }
@@ -60,6 +90,7 @@ body.dashboard-page { background: #0E1A2B; color: #DCE9F7; font-size: 14px; }
   content: ""; position: absolute; inset: -15px; border-radius: 50%;
 }
 .map-dot:hover, .map-dot.is-selected { transform: translate(-50%, -50%) scale(1.35); filter: brightness(1.15); }
+.map-dot.is-selected { z-index: 3; }
 .map-dot:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
 .map-dot.green { background: #4C9A6A; }
 .map-dot.yellow { background: #E0A030; }
@@ -69,13 +100,17 @@ body.dashboard-page { background: #0E1A2B; color: #DCE9F7; font-size: 14px; }
   70%  { box-shadow: 0 0 0 22px rgba(210,69,60,0); }
   100% { box-shadow: 0 0 0 0 rgba(210,69,60,0); }
 }
-.map-dot .tip {
-  display: none; position: absolute; left: 18px; top: -8px; white-space: nowrap;
-  background: #132338; border: 1px solid rgba(94,164,255,.3);
-  padding: 4px 10px; border-radius: var(--radius); font-size: 13px; color: #DCE9F7; z-index: 5;
+.map-info-tooltip {
+  position: fixed; z-index: 1200; width: max-content; max-width: min(280px, calc(100vw - 24px));
+  padding: 10px 14px; border: 1px solid rgba(94,164,255,.32); border-radius: var(--radius);
+  background: rgba(19,35,56,.98); color: #EAF3FF; font-size: 14px; line-height: 1.5;
+  box-shadow: 0 16px 38px rgba(2,10,20,.38), inset 0 1px 0 rgba(255,255,255,.06);
+  pointer-events: none; opacity: 0; translate: 0 4px;
+  transition: opacity var(--motion-fast) var(--ease-out), translate var(--motion-fast) var(--ease-out);
 }
-.map-dot:hover .tip, .map-dot.is-selected .tip, .map-dot:focus-visible .tip { display: block; }
-.map-legend { position: absolute; left: 16px; bottom: 12px; font-size: 13px; color: #7E9CBF; }
+.map-info-tooltip[hidden] { display: none; }
+.map-info-tooltip.is-visible { opacity: 1; translate: 0 0; }
+.map-legend { position: absolute; left: 16px; bottom: 12px; z-index: 1; font-size: 13px; color: #7E9CBF; }
 
 /* 右列 */
 .d-right { display: grid; grid-template-rows: 1fr 1fr; gap: 16px; }
@@ -97,12 +132,16 @@ body.dashboard-page { background: #0E1A2B; color: #DCE9F7; font-size: 14px; }
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 10%, #000 88%, transparent 100%);
   mask-image: linear-gradient(90deg, transparent 0%, #000 10%, #000 88%, transparent 100%);
 }
+.marquee-window:focus-visible { outline: 2px solid rgba(255,180,173,.9); outline-offset: 3px; border-radius: 4px; }
 .marquee-track {
   display: inline-block; white-space: nowrap;
   animation: scroll 24s linear infinite; color: #FFB4AD; font-size: 15px;
 }
+.marquee-track.is-paused { animation-play-state: paused; }
 @keyframes scroll { from { transform: translateX(20%); } to { transform: translateX(-100%); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .map-dot.red, .marquee-track { animation: none; }
+  .map-dot.red, .marquee-track, .d-connection[data-state="loading"]::before { animation: none; }
+  .d-top, .d-left, .d-map, .d-right, .d-marquee { animation: none; }
+  .panel:hover, .panel:focus-within { transform: none; }
 }
