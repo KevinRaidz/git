@@ -13,6 +13,17 @@
 
 {% if role and role != 'elder' %}
 <nav class="topnav{% if request.path == '/community/dashboard' %} topnav-dashboard{% endif %}">
+  <svg class="nav-goo-defs" aria-hidden="true" focusable="false">
+    <defs>
+      <filter id="anxin-nav-goo" x="-50%" y="-100%" width="200%" height="300%" color-interpolation-filters="sRGB">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"></feGaussianBlur>
+        <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -8" result="goo"></feColorMatrix>
+        <feBlend in="SourceGraphic" in2="goo"></feBlend>
+      </filter>
+    </defs>
+  </svg>
+  <span class="nav-rubber" aria-hidden="true"></span>
+  <span class="nav-goo-layer" aria-hidden="true"></span>
   <div class="nav-brand" aria-label="安芯，独居老人守护平台">
     <span class="brand-wordmark" aria-hidden="true"><span class="brand-an"><svg class="brand-heart" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><path d="M50 28C60 28 72 14 82 14C92 14 100 28 94 44C88 60 64 88 50 88C36 88 12 60 6 44C0 28 8 14 18 14C28 14 40 28 50 28Z"/></svg>安</span><span class="brand-xin">芯</span></span>
     <span class="brand-subtitle">独居老人守护平台</span>

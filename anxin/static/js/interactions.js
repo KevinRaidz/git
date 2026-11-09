@@ -68,9 +68,148 @@
     }
   });
 
+  const topnavLinks = document.querySelector('.topnav .nav-links');
+  const rubber = document.querySelector('.topnav .nav-rubber');
+  const gooLayer = document.querySelector('.topnav .nav-goo-layer');
+  let animateGooeyNav = () => 0;
+  if (topnavLinks && rubber) {
+    let hoveredLink = null;
+    let activeLink = topnavLinks.querySelector('a.active');
+    let stretchTimer = null;
+    let rubberRect = null;
+    const moveRubberTo = (link, stretch = false) => {
+      const nav = topnavLinks.closest('.topnav');
+      const navRect = nav.getBoundingClientRect();
+      const rect = link.getBoundingClientRect();
+      const nextLeft = rect.left - navRect.left;
+      const nextTop = rect.top - navRect.top;
+      const nextWidth = rect.width;
+      const nextHeight = rect.height;
+      const sameRow = rubberRect && Math.abs(rubberRect.top - nextTop) < 4;
+      if (stretch && rubberRect && sameRow) {
+        const currentRight = rubberRect.left + rubberRect.width;
+        const nextRight = nextLeft + nextWidth;
+        const edge = Math.min(rubberRect.left, nextLeft);
+        rubber.style.left = `${edge}px`;
+        rubber.style.width = `${Math.max(currentRight, nextRight) - edge}px`;
+        rubber.classList.add('is-stretching');
+        window.clearTimeout(stretchTimer);
+        stretchTimer = window.setTimeout(() => {
+          rubber.classList.remove('is-stretching');
+          rubber.style.top = `${nextTop}px`;
+          rubber.style.left = `${nextLeft}px`;
+          rubber.style.width = `${nextWidth}px`;
+          rubber.style.height = `${nextHeight}px`;
+          rubberRect = { left: nextLeft, top: nextTop, width: nextWidth, height: nextHeight };
+        }, 100);
+      } else {
+        rubber.style.top = `${nextTop}px`;
+        rubber.style.left = `${nextLeft}px`;
+        rubber.style.width = `${nextWidth}px`;
+        rubber.style.height = `${nextHeight}px`;
+        rubberRect = { left: nextLeft, top: nextTop, width: nextWidth, height: nextHeight };
+      }
+      rubber.classList.add('is-visible');
+    };
+
+    const settleOnActive = () => {
+      activeLink = topnavLinks.querySelector('a.active') || activeLink;
+      if (activeLink) moveRubberTo(activeLink);
+      else rubber.classList.remove('is-visible', 'is-stretching');
+    };
+
+    animateGooeyNav = (link) => {
+      if (reducedMotion || !gooLayer || !link || link === activeLink) return 0;
+      const nav = topnavLinks.closest('.topnav');
+      const navRect = nav.getBoundingClientRect();
+      const sourceRect = (activeLink || link).getBoundingClientRect();
+      const targetRect = link.getBoundingClientRect();
+      const sourceX = sourceRect.left - navRect.left + sourceRect.width / 2;
+      const sourceY = sourceRect.top - navRect.top + sourceRect.height / 2;
+      const targetX = targetRect.left - navRect.left + targetRect.width / 2;
+      const targetY = targetRect.top - navRect.top + targetRect.height / 2;
+      const dx = targetX - sourceX;
+      const dy = targetY - sourceY;
+      const distance = Math.hypot(dx, dy) || 1;
+      const normalX = -dy / distance;
+      const normalY = dx / distance;
+
+      gooLayer.replaceChildren();
+      for (let index = 0; index < 14; index += 1) {
+        const particle = document.createElement('span');
+        const spread = (Math.random() - .5) * Math.min(52, 18 + distance * .18);
+        const progress = .42 + Math.random() * .18;
+        const offsetX = (Math.random() - .5) * sourceRect.width * .34;
+        const offsetY = (Math.random() - .5) * sourceRect.height * .22;
+        const duration = 330 + Math.random() * 130;
+        particle.className = 'nav-goo-particle';
+        particle.style.setProperty('--goo-x', `${sourceX}px`);
+        particle.style.setProperty('--goo-y', `${sourceY}px`);
+        particle.style.setProperty('--goo-size', `${7 + Math.random() * 10}px`);
+        particle.style.setProperty('--goo-ox', `${offsetX}px`);
+        particle.style.setProperty('--goo-oy', `${offsetY}px`);
+        particle.style.setProperty('--goo-mx', `${dx * progress + normalX * spread}px`);
+        particle.style.setProperty('--goo-my', `${dy * progress + normalY * spread}px`);
+        particle.style.setProperty('--goo-dx', `${dx + (Math.random() - .5) * targetRect.width * .22}px`);
+        particle.style.setProperty('--goo-dy', `${dy + (Math.random() - .5) * targetRect.height * .16}px`);
+        particle.style.setProperty('--goo-duration', `${duration}ms`);
+        particle.style.setProperty('--goo-delay', `${Math.random() * 42}ms`);
+        gooLayer.appendChild(particle);
+      }
+
+      activeLink?.classList.remove('active');
+      activeLink?.removeAttribute('aria-current');
+      link.classList.add('active');
+      link.setAttribute('aria-current', 'page');
+      activeLink = link;
+      moveRubberTo(link, true);
+      rubber.classList.remove('is-gooey');
+      rubber.getBoundingClientRect();
+      rubber.classList.add('is-gooey');
+      window.setTimeout(() => {
+        rubber.classList.remove('is-gooey');
+        gooLayer.replaceChildren();
+      }, 520);
+      return 360;
+    };
+
+    window.requestAnimationFrame(settleOnActive);
+    document.fonts?.ready.then(settleOnActive);
+
+    topnavLinks.addEventListener('pointerover', event => {
+      if (event.pointerType === 'touch') return;
+      const link = event.target.closest('a[href]');
+      if (!link || !topnavLinks.contains(link)) return;
+      const changed = hoveredLink && hoveredLink !== link;
+      hoveredLink = link;
+      moveRubberTo(link, changed);
+    });
+    topnavLinks.addEventListener('pointermove', event => {
+      if (event.pointerType === 'touch') return;
+      const link = event.target.closest('a[href]');
+      if (link && link !== hoveredLink) {
+        const changed = !!hoveredLink;
+        hoveredLink = link;
+        moveRubberTo(link, changed);
+      }
+    });
+    topnavLinks.addEventListener('pointerleave', event => {
+      if (event.pointerType === 'touch') return;
+      hoveredLink = null;
+      window.clearTimeout(stretchTimer);
+      rubber.classList.remove('is-stretching');
+      settleOnActive();
+    });
+    window.addEventListener('resize', () => {
+      if (hoveredLink) moveRubberTo(hoveredLink);
+      else settleOnActive();
+    }, { passive: true });
+  }
+
   const topnav = document.querySelector('.topnav');
   if (topnav) {
     const islandSizeKey = 'anxin-island-size';
+    let navigationPending = false;
     if (!reducedMotion) {
       let previousSize = null;
       try {
@@ -138,6 +277,14 @@
         }));
       } catch (_) {
         // Storage may be unavailable in private browsing; navigation remains unaffected.
+      }
+
+      const delay = topnavLinks?.contains(link) ? animateGooeyNav(link) : 0;
+      if (delay > 0) {
+        event.preventDefault();
+        if (navigationPending) return;
+        navigationPending = true;
+        window.setTimeout(() => window.location.assign(destination.href), delay);
       }
     });
   }

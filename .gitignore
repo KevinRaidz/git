@@ -32,6 +32,8 @@ anxin/.git-inner-backup/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.tmp-*
+test-results/
 .coverage
 coverage/
 dist/

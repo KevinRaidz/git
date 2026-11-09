@@ -27,9 +27,16 @@
   <button class="e-card" onclick="speak('已呼叫社区网格员王芳，请稍等')">🏠 找小王<small>社区 王芳</small></button>
 </div>
 
-<button class="e-sos" id="btn-sos" onclick="goSos()">
-  <span class="progress" id="sos-progress"></span>
-  🆘 紧 急 求 助 · 长按 3 秒
+<button class="e-sos" id="btn-sos" aria-label="长按三秒启动紧急求助">
+  <span class="progress" id="sos-progress" aria-hidden="true"></span>
+  <span class="e-sos-icon" aria-hidden="true">
+    <svg viewBox="0 0 24 24" focusable="false"><path d="M6.6 3.5 9 3c.9-.2 1.8.3 2.2 1.2l1.1 2.6c.3.7.1 1.6-.5 2.1l-1.3 1.1a14.2 14.2 0 0 0 4.5 4.5l1.1-1.3c.5-.6 1.4-.8 2.1-.5l2.6 1.1c.9.4 1.4 1.3 1.2 2.2l-.5 2.4c-.2.9-1 1.5-1.9 1.5C10.3 19.9 4 13.6 4 5.4c0-.9.7-1.7 1.6-1.9Z"/></svg>
+  </span>
+  <span class="e-sos-copy">
+    <span class="e-sos-title">紧急求助</span>
+    <span class="e-sos-hint">长按 3 秒，通知家人和社区</span>
+  </span>
+  <span class="e-sos-timer" id="sos-hold-timer" aria-hidden="true">3 秒</span>
 </button>
 
 <script>
@@ -74,20 +81,36 @@ function doCheckin() {
 (function () {
   const btn = document.getElementById('btn-sos');
   const bar = document.getElementById('sos-progress');
+  const holdTimer = document.getElementById('sos-hold-timer');
   let timer = null, p = 0;
   const start = e => {
     e.preventDefault();
+    if (timer) return;
+    btn.classList.add('is-pressing');
+    if (holdTimer) holdTimer.textContent = '3 秒';
     timer = setInterval(() => {
       p += 2;
       bar.style.width = p + '%';
-      if (p >= 100) { clearInterval(timer); location.href = '/elder/sos'; }
+      if (holdTimer) holdTimer.textContent = Math.max(1, Math.ceil((100 - p) * 0.03)) + ' 秒';
+      if (p >= 100) {
+        clearInterval(timer); timer = null;
+        btn.classList.remove('is-pressing');
+        location.href = '/elder/sos';
+      }
     }, 60);
   };
-  const cancel = () => { clearInterval(timer); p = 0; bar.style.width = '0'; };
+  const cancel = () => {
+    clearInterval(timer); timer = null; p = 0; bar.style.width = '0';
+    btn.classList.remove('is-pressing');
+    if (holdTimer) holdTimer.textContent = '3 秒';
+  };
   btn.addEventListener('pointerdown', start);
   btn.addEventListener('pointerup', cancel);
   btn.addEventListener('pointerleave', cancel);
   btn.addEventListener('pointercancel', cancel);
+  btn.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') start(e); });
+  btn.addEventListener('keyup', e => { if (e.key === ' ' || e.key === 'Enter') cancel(); });
+  btn.addEventListener('blur', cancel);
 })();
 function goSos() { /* 长按触发跳转，此函数仅兜底 */ }
 </script>
