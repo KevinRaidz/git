@@ -34,6 +34,33 @@ python app.py
 
 浏览器打开 `http://127.0.0.1:5000/login`。首次运行会初始化本地 SQLite 演示数据库和演示账号；登录页可查看体验账号。演示数据仅用于本地体验。
 
+## Render 全栈部署
+
+应用由 Flask 同时提供 React 构建文件和 `/api` 接口。部署到 Render Web Service，不要将它作为纯静态 Cloudflare Pages 项目。
+
+在 Render 连接 GitHub 仓库并创建 Web Service，填写：
+
+| 设置 | 值 |
+|---|---|
+| Root Directory | `anxin` |
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `gunicorn --workers 1 --worker-class gthread --threads 8 --bind 0.0.0.0:$PORT wsgi:app` |
+
+为 Web Service 添加持久化磁盘，Mount Path 设为 `/var/data`。在 Environment 中设置以下变量；密码和密钥应使用独立的随机值，不要提交到 Git：
+
+| 变量 | 示例值/要求 |
+|---|---|
+| `ANXIN_ENV` | `production` |
+| `ANXIN_SECRET_KEY` | 至少 32 个字符的随机密钥 |
+| `ANXIN_ADMIN_PASSWORD` | 至少 10 个字符；首次初始化时用于 `admin_demo` |
+| `ANXIN_DEMO_PASSWORD` | 至少 10 个字符；首次初始化时用于其他演示账号 |
+| `ANXIN_DB_PATH` | `/var/data/anxin.db` |
+| `ANXIN_BACKUP_DIR` | `/var/data/backups` |
+
+Render 会提供 `PORT`，无需手动设置。首次部署会在持久化磁盘中初始化 SQLite 数据库并生成演示数据。账号密码变量只用于新建账号；已有数据库中的密码不会在每次启动时被覆盖。完成部署后先登录并修改账号密码，再绑定自有域名。Cloudflare 可用于 DNS 和域名管理，无需再创建 Pages 前端部署。
+
+当前数据库仍是 SQLite，适合演示和小规模验证；正式承载真实健康或联系信息前，应评估 PostgreSQL、访问控制、数据备份恢复、隐私和运维要求，并清理演示数据。
+
 ## 前端开发
 
 先在仓库根目录启动 Flask，然后另开终端：
@@ -86,6 +113,7 @@ Playwright 使用隔离的临时 SQLite 数据库，不会改动本地演示数�
 app.py                         # 仓库根启动入口
 anxin/
   app.py                       # Flask 应用与 API
+  wsgi.py                      # Gunicorn 生产启动入口
   access_control.py            # 角色、接口和数据范围校验
   admin_api.py                 # 管理、审计、导入导出与备份 API
   accounts.py                  # 账号、角色与默认演示数据

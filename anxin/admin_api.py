@@ -22,7 +22,9 @@ ELDER_FIELDS = ('name', 'age', 'gender', 'address', 'live_alone', 'chronic', 'al
 DEVICE_FIELDS = ('type', 'location', 'elder_id', 'status', 'last_reading')
 SERVICE_FIELDS = ('elder_id', 'category', 'title', 'status', 'assignee_id', 'assignee_name',
                   'scheduled_at', 'arrived_at', 'receipt', 'family_feedback')
-BACKUP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backups')
+BACKUP_DIR = os.path.abspath(os.path.expanduser(
+    os.environ.get('ANXIN_BACKUP_DIR') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backups')
+))
 _BACKUP_THREAD = None
 _BACKUP_THREAD_LOCK = threading.Lock()
 

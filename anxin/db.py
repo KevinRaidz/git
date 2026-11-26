@@ -10,7 +10,10 @@ import random
 from datetime import datetime, timedelta
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "anxin.db")
+DB_PATH = os.path.abspath(os.path.expanduser(
+    os.environ.get("ANXIN_DB_PATH") or os.path.join(BASE_DIR, "anxin.db")
+))
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 random.seed(42)  # 保证每次生成的演示数据一致
 
@@ -296,7 +299,7 @@ def init_db():
     conn.close()
     if not has_data:
         seed()
-        print("[安芯] 已初始化演示数据库 anxin.db（24 位老人 / 6 条预警工单）")
+        print(f"[安芯] 已初始化演示数据库 {DB_PATH}（24 位老人 / 6 条预警工单）")
     _seed_relationships_and_devices()
 
 

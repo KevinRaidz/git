@@ -23,8 +23,17 @@ import access_control as access
 from admin_api import bp as admin_api, start_backup_monitor
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('ANXIN_SECRET_KEY') or secrets.token_hex(32)
-app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax', PERMANENT_SESSION_LIFETIME=timedelta(hours=8))
+IS_PRODUCTION = os.environ.get('ANXIN_ENV', '').lower() == 'production'
+SECRET_KEY = os.environ.get('ANXIN_SECRET_KEY')
+if IS_PRODUCTION and not SECRET_KEY:
+    raise RuntimeError('ANXIN_SECRET_KEY must be set in production')
+app.secret_key = SECRET_KEY or secrets.token_urlsafe(48)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=IS_PRODUCTION,
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+)
 
 DEMO_ELDER_ID = 1  # 演示主角：张桂芳（82 岁独居，儿子李伟在上海）
 
@@ -537,4 +546,7 @@ if __name__ == "__main__":
     db.init_db()
     care.start_monitor()
     start_backup_monitor()
-    app.run(host="127.0.0.1", port=5000, debug=True, use_reloader=False)
+    host = "0.0.0.0" if IS_PRODUCTION else "127.0.0.1"
+    port = int(os.environ.get('PORT', '5000'))
+    debug = not IS_PRODUCTION and os.environ.get('FLASK_DEBUG', '1') == '1'
+    app.run(host=host, port=port, debug=debug, use_reloader=False)

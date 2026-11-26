@@ -1,9 +1,11 @@
-"""本地演示账号：角色由服务端账户确定。"""
+"""Demo account seed data; credentials can be overridden for deployments."""
+import os
 from datetime import datetime
 
 from werkzeug.security import generate_password_hash
 
-DEMO_PASSWORD = 'Anxin2026!'
+DEMO_PASSWORD = os.environ.get('ANXIN_DEMO_PASSWORD', 'Anxin2026!')
+ADMIN_PASSWORD = os.environ.get('ANXIN_ADMIN_PASSWORD', DEMO_PASSWORD)
 DEMO_USERS = [
     ('admin_demo', '系统管理员', 'superadmin'),
     ('elder_demo', '张桂芳', 'elder'),
@@ -120,11 +122,10 @@ def init_schema(conn):
     ''')
     _ensure_column(conn, 'devices', 'community_id INTEGER NOT NULL DEFAULT 1')
     missing = [u for u in DEMO_USERS if not conn.execute('SELECT id FROM users WHERE username=?', (u[0],)).fetchone()]
-    if missing:
-        password_hash = generate_password_hash(DEMO_PASSWORD)
-        for username, name, role in missing:
-            conn.execute('INSERT INTO users(username,password_hash,name,role,community_id) VALUES(?,?,?,?,1)',
-                         (username, password_hash, name, role))
+    for username, name, role in missing:
+        password = ADMIN_PASSWORD if role == 'superadmin' else DEMO_PASSWORD
+        conn.execute('INSERT INTO users(username,password_hash,name,role,community_id) VALUES(?,?,?,?,1)',
+                     (username, generate_password_hash(password), name, role))
     conn.execute("UPDATE users SET community_id=1 WHERE community_id IS NULL AND role IN ('community','volunteer','family','elder')")
     for role, permissions in ROLE_PERMISSIONS.items():
         for permission in permissions:

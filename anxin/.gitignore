@@ -5,3 +5,4 @@ anxin.db
 .venv/
 venv/
 .backups/
+backups/
