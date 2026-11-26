@@ -12,6 +12,7 @@
 """
 import os
 import secrets
+import time
 from datetime import datetime, timedelta
 
 from flask import Flask, g, jsonify, request, send_from_directory, session
@@ -23,6 +24,7 @@ import access_control as access
 from admin_api import bp as admin_api, start_backup_monitor
 
 app = Flask(__name__)
+app.logger.setLevel('INFO')
 IS_PRODUCTION = os.environ.get('ANXIN_ENV', '').lower() == 'production'
 SECRET_KEY = os.environ.get('ANXIN_SECRET_KEY')
 if IS_PRODUCTION and not SECRET_KEY:
@@ -74,6 +76,12 @@ def current_account():
     uid = session.get('user_id')
     row = db.query_one('SELECT id,username,name,role,status,community_id,elder_id,phone FROM users WHERE id=?', (uid,)) if uid else None
     return dict(row) if row else None
+
+
+@app.before_request
+def log_login_request_entry():
+    if request.path == '/api/session' and request.method == 'POST':
+        app.logger.info('session_login request_entered content_length=%s', request.content_length)
 
 
 @app.before_request
@@ -186,25 +194,42 @@ def change_password():
 @app.route("/api/session", methods=["GET", "POST", "DELETE"])
 def api_session():
     if request.method == "POST":
+        app.logger.info('session_login stage=parse_request state=started')
+        stage_started = time.monotonic()
         data = request.get_json(silent=True) or {}
+        app.logger.info('session_login stage=parse_request state=completed elapsed_ms=%.1f',
+                        (time.monotonic() - stage_started) * 1000)
         if not isinstance(data, dict) or not isinstance(data.get('username'), str) or not isinstance(data.get('password'), str):
             return jsonify(ok=False, message='请输入账号和密码'), 400
         username, password = data['username'].strip(), data['password']
         if not username or not password or len(username) > 80 or len(password) > 200:
             return jsonify(ok=False, message='请输入有效的账号和密码'), 400
+        app.logger.info('session_login stage=lookup_user state=started')
+        stage_started = time.monotonic()
         user = db.query_one('SELECT * FROM users WHERE username=?', (username,))
-        if not user or not check_password_hash(user['password_hash'], password):
+        app.logger.info('session_login stage=lookup_user state=completed elapsed_ms=%.1f',
+                        (time.monotonic() - stage_started) * 1000)
+        app.logger.info('session_login stage=verify_password state=started')
+        stage_started = time.monotonic()
+        password_ok = bool(user and check_password_hash(user['password_hash'], password))
+        app.logger.info('session_login stage=verify_password state=completed elapsed_ms=%.1f',
+                        (time.monotonic() - stage_started) * 1000)
+        if not password_ok:
+            app.logger.info('session_login stage=write_failed_login_audit state=started')
             audit_login(username, False, '账号或密码错误')
             return jsonify(ok=False, message='账号或密码错误'), 401
         if user['status'] != 'active':
+            app.logger.info('session_login stage=write_disabled_login_audit state=started')
             audit_login(username, False, '账号已停用')
             return jsonify(ok=False, message='账号已停用，请联系管理员'), 401
         if data.get('role') and data['role'] != user['role']:
+            app.logger.info('session_login stage=write_role_mismatch_audit state=started')
             audit_login(username, False, '身份选择与账号角色不匹配')
             return jsonify(ok=False, message='该账号不属于所选身份，请选择对应身份后登录'), 403
         session.clear()
         session['user_id'] = user['id']
         session.permanent = True
+        app.logger.info('session_login stage=write_success_login_audit state=started')
         access.audit(dict(user), 'session', 'login', username, True, '', {}, {}, request.remote_addr or '')
     elif request.method == "DELETE":
         old_user = current_account()
@@ -212,7 +237,13 @@ def api_session():
         if old_user:
             access.audit(old_user, 'session', 'logout', old_user['username'], True, '', {}, {}, request.remote_addr or '')
 
+    if request.method == 'POST':
+        app.logger.info('session_login stage=load_session_user state=started')
+        stage_started = time.monotonic()
     user = current_account()
+    if request.method == 'POST':
+        app.logger.info('session_login stage=load_session_user state=completed elapsed_ms=%.1f',
+                        (time.monotonic() - stage_started) * 1000)
     if user and user['status'] != 'active':
         session.clear()
         user = None
