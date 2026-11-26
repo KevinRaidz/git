@@ -6,7 +6,9 @@ SQLite 建表 + 演示数据种子。首次运行 app.py 时自动初始化 anxi
 """
 import os
 import sqlite3
+import logging
 import random
+import time
 from datetime import datetime, timedelta
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -58,11 +60,36 @@ def get_conn():
 
 def query(sql, args=()):
     """查询多行"""
-    conn = get_conn()
+    trace_login = sql == 'SELECT * FROM users WHERE username=?'
+    conn = None
+    started = time.monotonic()
     try:
-        return conn.execute(sql, args).fetchall()
+        if trace_login:
+            logging.getLogger('app').info('session_login sqlite_connect state=started')
+        conn = get_conn()
+        if trace_login:
+            logging.getLogger('app').info('session_login sqlite_connect state=completed elapsed_ms=%.1f',
+                                          (time.monotonic() - started) * 1000)
+            started = time.monotonic()
+            logging.getLogger('app').info('session_login sqlite_execute state=started')
+        cursor = conn.execute(sql, args)
+        if trace_login:
+            logging.getLogger('app').info('session_login sqlite_execute state=completed elapsed_ms=%.1f',
+                                          (time.monotonic() - started) * 1000)
+            started = time.monotonic()
+            logging.getLogger('app').info('session_login sqlite_fetch state=started')
+        rows = cursor.fetchall()
+        if trace_login:
+            logging.getLogger('app').info('session_login sqlite_fetch state=completed elapsed_ms=%.1f',
+                                          (time.monotonic() - started) * 1000)
+        return rows
+    except Exception:
+        if trace_login:
+            logging.getLogger('app').exception('session_login sqlite_query state=failed')
+        raise
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
 
 def query_one(sql, args=()):
