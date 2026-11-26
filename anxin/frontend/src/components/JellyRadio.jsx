@@ -3,6 +3,7 @@
 
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { animate, motion, motionValue, useReducedMotion, useTransform } from 'motion/react'
+import { NavLink } from 'react-router-dom'
 
 import './JellyRadio.css'
 
@@ -16,9 +17,11 @@ const spring = (k, m, bounce) => ({
   mass: m,
 })
 
-const Chip = forwardRef(function Chip({ mv, children, ...rest }, ref) {
+const MotionNavLink = motion.create(NavLink)
+
+const Chip = forwardRef(function Chip({ mv, as: Component = motion.button, children, ...rest }, ref) {
   const transform = useTransform(() => `translateX(${mv.x.get()}px) scale(${mv.sx.get()}, ${mv.sy.get()})`)
-  return <motion.button ref={ref} style={{ transform }} {...rest}>{children}</motion.button>
+  return <Component ref={ref} style={{ transform }} {...rest}>{children}</Component>
 })
 
 export default function JellyRadio({
@@ -42,12 +45,13 @@ export default function JellyRadio({
   stiffness = 580,
   disabled = false,
   ariaLabel = 'Options',
+  navigation = false,
   className = '',
 }) {
   const list = items.map(item => (typeof item === 'string' ? { value: item, label: item } : item))
   const [inner, setInner] = useState(() => defaultValue ?? list[0]?.value)
   const current = value ?? inner
-  const at = Math.max(0, list.findIndex(item => item.value === current))
+  const at = list.findIndex(item => item.value === current)
   const reduce = useReducedMotion()
   const groupRef = useRef(null)
   const chipRefs = useRef([])
@@ -72,14 +76,14 @@ export default function JellyRadio({
     const config = cfg.current
     const group = groupRef.current
     const rtl = group ? getComputedStyle(group).direction === 'rtl' : false
-    const push = ((widths.current[selected] ?? 0) * config.swell) / 2 + config.barge
+    const push = selected < 0 ? 0 : ((widths.current[selected] ?? 0) * config.swell) / 2 + config.barge
     for (let index = 0; index < config.count; index += 1) {
       const mv = mvFor(index)
-      const on = index === selected
-      const far = Math.abs(index - selected)
-      const direction = Math.sign(index - selected) * (rtl ? -1 : 1)
+      const on = selected >= 0 && index === selected
+      const far = selected < 0 ? 0 : Math.abs(index - selected)
+      const direction = selected < 0 ? 0 : Math.sign(index - selected) * (rtl ? -1 : 1)
       const x = direction * push
-      const scale = on ? 1 + config.swell : 1 - config.shrink
+      const scale = selected < 0 ? 1 : on ? 1 + config.swell : 1 - config.shrink
       if (instant || config.reduce) {
         mv.x.jump(x)
         mv.sx.jump(scale)
@@ -128,7 +132,7 @@ export default function JellyRadio({
   useEffect(() => {
     if (applied.current === at) return
     applied.current = at
-    apply(at, true)
+    apply(at, false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [at])
 
@@ -172,7 +176,7 @@ export default function JellyRadio({
   return (
     <div
       ref={groupRef}
-      role="radiogroup"
+      role={navigation ? 'group' : 'radiogroup'}
       aria-label={ariaLabel}
       data-disabled={disabled ? '' : undefined}
       className={`jelly-radio${className ? ` ${className}` : ''}`}
@@ -193,19 +197,27 @@ export default function JellyRadio({
           key={item.value}
           mv={mvFor(index)}
           ref={element => { chipRefs.current[index] = element }}
-          type="button"
-          role="radio"
-          aria-checked={index === at}
-          tabIndex={index === at ? 0 : -1}
+          as={navigation ? MotionNavLink : motion.button}
+          to={navigation ? item.value : undefined}
+          end={navigation || undefined}
+          type={navigation ? undefined : 'button'}
+          role={navigation ? undefined : 'radio'}
+          aria-label={item.ariaLabel}
+          aria-description={item.description}
+          aria-checked={navigation ? undefined : index === at}
+          tabIndex={navigation ? undefined : index === at || (at < 0 && index === 0) ? 0 : -1}
           disabled={disabled || Boolean(item.disabled)}
-          className="jelly-radio__chip"
+          className={`jelly-radio__chip${item.className ? ` ${item.className}` : ''}`}
           data-on={index === at ? 'true' : 'false'}
           onClick={event => commit(index, event.detail === 0)}
-          onKeyDown={event => onKeyDown(event, index)}
+          onKeyDown={navigation ? undefined : event => onKeyDown(event, index)}
         >
           <span className="jelly-radio__skin">
-            {item.icon ? <span className="jelly-radio__icon">{item.icon}</span> : null}
-            <span className="jelly-radio__label">{item.label}</span>
+            {item.content ? <span className="jelly-radio__content">{item.content}</span> : <>
+              {item.icon ? <span className="jelly-radio__icon">{item.icon}</span> : null}
+              <span className="jelly-radio__label">{item.label}</span>
+              {item.description ? <span className="jelly-radio__description">{item.description}</span> : null}
+            </>}
           </span>
         </Chip>
       ))}

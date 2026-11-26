@@ -13,7 +13,7 @@ const axis = {
 
 export default function DashboardPage({ embedded = false }) {
   useBodyClass(embedded ? null : 'dashboard-page')
-  const { data, loading, error } = useApi(`/api/dashboard${embedded ? '?preview=1' : ''}`, { interval: 5000 })
+  const { data, loading, error } = useApi('/api/dashboard', { interval: 5000 })
   const [scale, setScale] = useState(1)
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
   const [selected, setSelected] = useState(null)

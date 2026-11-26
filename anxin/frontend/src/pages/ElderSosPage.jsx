@@ -55,7 +55,7 @@ export default function ElderSosPage() {
         <section className="sos-stage active" id="stage-sent">
           <CheckCircle2 className="sent-icon" size={72} aria-hidden="true" />
           <h1>求助已发送</h1>
-          <p className="sos-sub">请保持电话畅通，救援人员正在联系您</p>
+          <p className="sos-sub">求助已记录，请保持电话畅通，等待社区确认</p>
           <div className="sos-notified">{notified.map(item => <div key={item}>{item}</div>)}</div>
           <div className="med-card">
             <h2>{data.elder.name} · 医疗信息卡</h2>

@@ -1,9 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useSession } from '../App'
+import { useEffect, useRef } from 'react'
 import { useBodyClass } from '../hooks'
 import { cancelUnifiedScrollAnimation, unifiedSections } from '../unifiedSections'
-import AuthDialog from '../components/AuthDialog'
 import DashboardPage from './DashboardPage'
 import ElderHomePage from './ElderHomePage'
 import FamilyPage from './FamilyPage'
@@ -12,9 +9,6 @@ import VolunteerPage from './VolunteerPage'
 
 export default function UnifiedPage() {
   useBodyClass('unified-body')
-  const { session } = useSession()
-  const navigate = useNavigate()
-  const [authOpen, setAuthOpen] = useState(true)
   const scrollerRef = useRef(null)
   const panelRefs = useRef([])
 
@@ -80,23 +74,22 @@ export default function UnifiedPage() {
       <div className="unified-scroll-track">
         <div className="unified-scene-stage">
           <section ref={node => { panelRefs.current[0] = node }} id="section-home" className="unified-section unified-section-home" aria-label="首页">
-            <LoginPage embedded onOpenAuth={() => { navigate('/login', { replace: true }); setAuthOpen(true) }} />
+            <LoginPage embedded />
           </section>
           <section ref={node => { panelRefs.current[1] = node }} id="section-elder" className="unified-section unified-section-elder" aria-label="老人端">
             <ElderHomePage embedded />
           </section>
           <section ref={node => { panelRefs.current[2] = node }} id="section-family" className="unified-section unified-section-family" aria-label="子女端">
-            <FamilyPage embedded />
+            <FamilyPage />
           </section>
           <section ref={node => { panelRefs.current[3] = node }} id="section-community" className="unified-section unified-section-community" aria-label="社区端">
             <DashboardPage embedded />
           </section>
           <section ref={node => { panelRefs.current[4] = node }} id="section-volunteer" className="unified-section unified-section-volunteer" aria-label="志愿者端">
-            <VolunteerPage embedded />
+            <VolunteerPage />
           </section>
         </div>
       </div>
-      {!session?.authenticated && authOpen && <AuthDialog onClose={() => setAuthOpen(false)} />}
     </main>
   )
 }

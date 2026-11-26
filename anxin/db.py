@@ -8,7 +8,6 @@ import os
 import sqlite3
 import random
 from datetime import datetime, timedelta
-from werkzeug.security import generate_password_hash
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "anxin.db")
@@ -98,21 +97,6 @@ CREATE TABLE IF NOT EXISTS elders (
     next_visit_due TEXT
 );
 
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL,
-    email TEXT,
-    phone TEXT,
-    password_hash TEXT NOT NULL,
-    account_type TEXT NOT NULL CHECK (account_type IN ('admin','user')),
-    role TEXT NOT NULL CHECK (role IN ('elder','family','community','volunteer')),
-    created_at TEXT NOT NULL
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_ci ON users(username COLLATE NOCASE);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_ci ON users(email COLLATE NOCASE) WHERE email IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone ON users(phone) WHERE phone IS NOT NULL;
-
 CREATE TABLE IF NOT EXISTS readings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     elder_id INTEGER,
@@ -137,9 +121,7 @@ CREATE TABLE IF NOT EXISTS alerts (
     assignee TEXT,
     assignee_role TEXT,            -- worker/volunteer/property
     closed_at TEXT,
-    result TEXT,
-    anomaly_percentile REAL,
-    baseline_scope TEXT
+    result TEXT
 );
 
 CREATE TABLE IF NOT EXISTS needs (
@@ -149,8 +131,7 @@ CREATE TABLE IF NOT EXISTS needs (
     descr TEXT,
     urgency TEXT,                  -- high/normal
     status TEXT,                   -- 待对接/已转服务/已完成
-    provider TEXT,
-    source_alert_id INTEGER
+    provider TEXT
 );
 
 CREATE TABLE IF NOT EXISTS visits (
@@ -170,74 +151,9 @@ CREATE TABLE IF NOT EXISTS events (
     kind TEXT                      -- normal/warn
 );
 
-CREATE TABLE IF NOT EXISTS sensor_readings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    elder_id INTEGER NOT NULL,
-    observed_at TEXT NOT NULL,
-    door_events REAL NOT NULL DEFAULT 0,
-    water_liters REAL NOT NULL DEFAULT 0,
-    activity_minutes REAL NOT NULL DEFAULT 0,
-    room_transitions REAL NOT NULL DEFAULT 0,
-    night_activity REAL NOT NULL DEFAULT 0,
-    fall_confidence REAL NOT NULL DEFAULT 0,
-    still_minutes REAL NOT NULL DEFAULT 0,
-    source TEXT NOT NULL DEFAULT 'device'
-);
-
-CREATE TABLE IF NOT EXISTS behavior_baselines (
-    elder_id INTEGER PRIMARY KEY,
-    trained_at TEXT NOT NULL,
-    sample_count INTEGER NOT NULL,
-    scope TEXT NOT NULL,
-    model_name TEXT NOT NULL DEFAULT 'IsolationForest',
-    feature_summary TEXT NOT NULL DEFAULT '{}'
-);
-
-CREATE TABLE IF NOT EXISTS service_resources (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    category TEXT NOT NULL,
-    provider TEXT NOT NULL,
-    area TEXT NOT NULL,
-    capacity INTEGER NOT NULL DEFAULT 0,
-    available INTEGER NOT NULL DEFAULT 0,
-    contact TEXT,
-    active INTEGER NOT NULL DEFAULT 1
-);
-
-CREATE TABLE IF NOT EXISTS need_service_links (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    need_id INTEGER NOT NULL,
-    resource_id INTEGER NOT NULL,
-    status TEXT NOT NULL DEFAULT 'matched',
-    linked_at TEXT NOT NULL,
-    UNIQUE(need_id, resource_id)
-);
-
-CREATE TABLE IF NOT EXISTS work_order_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    alert_id INTEGER NOT NULL,
-    from_status TEXT,
-    to_status TEXT NOT NULL,
-    actor_role TEXT NOT NULL,
-    note TEXT,
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS follow_up_records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    alert_id INTEGER NOT NULL,
-    actor_role TEXT NOT NULL,
-    result TEXT NOT NULL,
-    satisfaction INTEGER,
-    created_at TEXT NOT NULL
-);
-
 CREATE INDEX IF NOT EXISTS idx_alert_elder ON alerts(elder_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_reading ON readings(elder_id, day);
 CREATE INDEX IF NOT EXISTS idx_alert_status ON alerts(status);
-CREATE INDEX IF NOT EXISTS idx_sensor_elder_time ON sensor_readings(elder_id, observed_at);
-CREATE INDEX IF NOT EXISTS idx_work_order_logs_alert ON work_order_logs(alert_id, created_at);
 """
 
 
@@ -353,126 +269,83 @@ def seed():
     conn.close()
 
 
-def seed_extensions():
-    """Add deterministic IoT history and service resources to older demo databases."""
-    conn = get_conn()
-    c = conn.cursor()
-    if c.execute("SELECT COUNT(*) FROM sensor_readings").fetchone()[0] == 0:
-        for elder in c.execute("SELECT id, live_alone, age FROM elders").fetchall():
-            for days_ago in range(30, 0, -1):
-                base = 11 if elder["live_alone"] else 7
-                door = max(1, round(random.gauss(base, 2.0)))
-                water = max(20, round(random.gauss(92, 12), 1))
-                activity = max(90, round(random.gauss(610 - max(0, elder["age"] - 75) * 5, 70), 1))
-                transitions = max(2, round(random.gauss(door * 2.1, 3)))
-                night = max(0, round(random.gauss(1.1, 0.8), 1))
-                observed = (datetime.now() - timedelta(days=days_ago)).replace(hour=20, minute=0, second=0, microsecond=0)
-                c.execute(
-                    """INSERT INTO sensor_readings
-                       (elder_id, observed_at, door_events, water_liters, activity_minutes,
-                        room_transitions, night_activity, source)
-                       VALUES (?,?,?,?,?,?,?,'synthetic_baseline')""",
-                    (elder["id"], observed.strftime("%Y-%m-%d %H:%M:%S"), door, water,
-                     activity, transitions, night),
-                )
-
-    if c.execute("SELECT COUNT(*) FROM service_resources").fetchone()[0] == 0:
-        resources = [
-            ("幸福里长者食堂", "meal", "幸福里社区服务中心", "幸福里街道", 40, 18, "社区服务台"),
-            ("社区卫生服务站", "medical", "幸福里卫生服务中心", "幸福里街道", 24, 9, "社区卫生站"),
-            ("适老化改造队", "renovation", "安居改造服务队", "全街道", 8, 3, "街道养老专班"),
-            ("居家保洁服务", "housekeeping", "银龄家政服务社", "幸福里街道", 30, 11, "社区服务台"),
-            ("探访关爱志愿队", "visit", "幸福里志愿服务队", "幸福里街道", 50, 21, "社区志愿站"),
-        ]
-        c.executemany(
-            """INSERT INTO service_resources
-               (name, category, provider, area, capacity, available, contact)
-               VALUES (?,?,?,?,?,?,?)""",
-            resources,
-        )
-
-    if c.execute("SELECT COUNT(*) FROM need_service_links").fetchone()[0] == 0:
-        resources = {row["category"]: row["id"] for row in c.execute("SELECT id, category FROM service_resources")}
-        for need in c.execute("SELECT id, category FROM needs").fetchall():
-            resource_id = resources.get(need["category"])
-            if resource_id:
-                c.execute(
-                    "INSERT OR IGNORE INTO need_service_links (need_id, resource_id, linked_at) VALUES (?,?,?)",
-                    (need["id"], resource_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                )
-    conn.commit()
-    conn.close()
-
-
-def seed_admin_user():
-    """Create a local demo administrator once; deployments should set ANXIN_ADMIN_PASSWORD."""
-    if query_one("SELECT id FROM users WHERE account_type='admin' LIMIT 1"):
-        return
-    password = os.environ.get("ANXIN_ADMIN_PASSWORD", "admin123456")
-    execute(
-        """INSERT INTO users (username, email, password_hash, account_type, role, created_at)
-           VALUES (?,?,?,?,?,?)""",
-        (
-            "admin",
-            "admin@anxin.local",
-            generate_password_hash(password),
-            "admin",
-            "community",
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        ),
-    )
-
-
 def init_db():
     """建库：表不存在则建表，无数据则写种子数据"""
     conn = get_conn()
     conn.executescript(SCHEMA)
-    user_schema = conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
-    ).fetchone()
-    if user_schema and "'elder'" not in user_schema["sql"]:
-        conn.execute("DROP INDEX IF EXISTS idx_users_username_ci")
-        conn.execute("DROP INDEX IF EXISTS idx_users_email_ci")
-        conn.execute("DROP INDEX IF EXISTS idx_users_phone")
-        conn.execute("ALTER TABLE users RENAME TO users_legacy_roles")
-        conn.execute(
-            """CREATE TABLE users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL,
-                email TEXT,
-                phone TEXT,
-                password_hash TEXT NOT NULL,
-                account_type TEXT NOT NULL CHECK (account_type IN ('admin','user')),
-                role TEXT NOT NULL CHECK (role IN ('elder','family','community','volunteer')),
-                created_at TEXT NOT NULL
-            )"""
-        )
-        conn.execute(
-            """INSERT INTO users (id, username, email, phone, password_hash, account_type, role, created_at)
-               SELECT id, username, email, phone, password_hash, account_type,
-                      CASE WHEN account_type='admin' THEN 'community' ELSE 'family' END, created_at
-               FROM users_legacy_roles"""
-        )
-        conn.execute("DROP TABLE users_legacy_roles")
-        conn.execute("CREATE UNIQUE INDEX idx_users_username_ci ON users(username COLLATE NOCASE)")
-        conn.execute("CREATE UNIQUE INDEX idx_users_email_ci ON users(email COLLATE NOCASE) WHERE email IS NOT NULL")
-        conn.execute("CREATE UNIQUE INDEX idx_users_phone ON users(phone) WHERE phone IS NOT NULL")
-    alert_columns = {row["name"] for row in conn.execute("PRAGMA table_info(alerts)")}
-    if "anomaly_percentile" not in alert_columns:
-        conn.execute("ALTER TABLE alerts ADD COLUMN anomaly_percentile REAL")
-    if "baseline_scope" not in alert_columns:
-        conn.execute("ALTER TABLE alerts ADD COLUMN baseline_scope TEXT")
-    need_columns = {row["name"] for row in conn.execute("PRAGMA table_info(needs)")}
-    if "source_alert_id" not in need_columns:
-        conn.execute("ALTER TABLE needs ADD COLUMN source_alert_id INTEGER")
+    import care
+    care.init_schema(conn)
+    import accounts
+    accounts.init_schema(conn)
+    for table, declaration in (
+        ('elders', 'community_id INTEGER DEFAULT 1'),
+        ('elders', "status TEXT NOT NULL DEFAULT 'active'"),
+        ('elders', 'archived_at TEXT'),
+        ('elders', "allergy TEXT DEFAULT ''"),
+        ('alerts', 'assignee_user_id INTEGER'),
+        ('care_notices', 'user_id INTEGER'),
+        ('care_notices', 'community_id INTEGER'),
+    ):
+        _ensure_column(conn, table, declaration)
+    conn.execute('UPDATE elders SET community_id=1 WHERE community_id IS NULL')
+    conn.execute("UPDATE elders SET status='active' WHERE status IS NULL OR status=''")
+    conn.execute('UPDATE devices SET community_id=COALESCE((SELECT community_id FROM elders WHERE elders.id=devices.elder_id),1) WHERE elder_id IS NOT NULL')
+    conn.execute("UPDATE alerts SET assignee_user_id=(SELECT id FROM users WHERE users.name=alerts.assignee AND users.role='volunteer' LIMIT 1) WHERE assignee_role='volunteer' AND assignee_user_id IS NULL")
     conn.commit()
     has_data = conn.execute("SELECT COUNT(*) FROM elders").fetchone()[0]
     conn.close()
     if not has_data:
         seed()
         print("[安芯] 已初始化演示数据库 anxin.db（24 位老人 / 6 条预警工单）")
-    seed_extensions()
-    seed_admin_user()
+    _seed_relationships_and_devices()
+
+
+def _ensure_column(conn, table, declaration):
+    name = declaration.split()[0]
+    columns = {row['name'] for row in conn.execute(f'PRAGMA table_info({table})')}
+    if name not in columns:
+        conn.execute(f'ALTER TABLE {table} ADD COLUMN {declaration}')
+
+
+def _seed_relationships_and_devices():
+    conn = get_conn()
+    try:
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        family = conn.execute("SELECT id FROM users WHERE username='family_demo'").fetchone()
+        elder = conn.execute("SELECT id FROM users WHERE username='elder_demo'").fetchone()
+        if family:
+            conn.execute("INSERT OR IGNORE INTO family_links(user_id,elder_id,relation,phone,emergency_contact,created_at) VALUES(?,1,'儿子','13800000000',1,?)",
+                         (family['id'], now))
+        if elder:
+            conn.execute("UPDATE users SET elder_id=1 WHERE id=? AND elder_id IS NULL", (elder['id'],))
+        conn.execute("""INSERT OR IGNORE INTO system_config(key,value,updated_at) VALUES
+            ('platform_name','安芯长者关爱平台',?),('contact_phone','400-000-2026',?),
+            ('red_alert_minutes','5',?),('yellow_alert_minutes','30',?),('password_min_length','10',?)""",
+                     (now, now, now, now, now))
+        for category, entries in {
+            'elder_status': [('active', '在册'), ('archived', '已归档')],
+            'risk_level': [('green', '平安'), ('yellow', '需关注'), ('red', '紧急')],
+            'device_type': [('water', '智能水表'), ('electricity', '智能电表'), ('door', '门磁'), ('motion', '红外活动监测')],
+            'service_category': [('visit', '探访'), ('meal', '助餐'), ('medical', '助医'), ('housekeeping', '保洁')],
+        }.items():
+            for code, label in entries:
+                conn.execute('INSERT OR IGNORE INTO data_dictionary(category,code,label) VALUES(?,?,?)',
+                             (category, code, label))
+        existing = conn.execute('SELECT COUNT(*) AS n FROM devices').fetchone()['n']
+        if not existing:
+            elders = conn.execute('SELECT id FROM elders WHERE status != \'archived\'').fetchall()
+            types = [('water', '厨房'), ('electricity', '入户电箱'), ('door', '入户门'), ('motion', '客厅')]
+            for row in elders:
+                for index, (device_type, location) in enumerate(types, start=1):
+                    online = not (row['id'] == 8 and index == 4)
+                    code = f"DEV-{row['id']:03d}-{index:02d}"
+                    conn.execute('''INSERT OR IGNORE INTO devices(code,type,location,elder_id,status,last_reading,updated_at)
+                                    VALUES(?,?,?,?,?,?,?)''',
+                                 (code, device_type, location, row['id'], 'online' if online else 'offline',
+                                  '在线' if online else '14 小时无数据', now))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

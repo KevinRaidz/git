@@ -2,7 +2,6 @@ const statusRows = [
   { id: 'pending', label: '待核实', tone: 'red', target: 1, direction: 'max' },
   { id: 'dispatched', label: '已派单', tone: 'yellow', target: 2, direction: 'max' },
   { id: 'processing', label: '处置中', tone: 'blue', target: 2, direction: 'max' },
-  { id: 'follow_up', label: '待回访', tone: 'yellow', target: 1, direction: 'max' },
   { id: 'closed', label: '已归档', tone: 'green', target: 4, direction: 'min' },
 ]
 

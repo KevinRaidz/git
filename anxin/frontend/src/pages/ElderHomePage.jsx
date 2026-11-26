@@ -17,7 +17,7 @@ function speak(text) {
 
 export default function ElderHomePage({ embedded = false }) {
   useBodyClass(embedded ? null : 'elder-page')
-  const { data, loading, error, reload } = useApi(`/api/elder/home${embedded ? '?preview=1' : ''}`)
+  const { data, loading, error, reload } = useApi('/api/elder/home')
   const toast = useToast()
   const navigate = useNavigate()
 

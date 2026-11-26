@@ -102,6 +102,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .jelly-radio__skin,
+  .jelly-radio__skin::before {
+    transition: none;
+  }
+
   .jelly-radio__chip:active .jelly-radio__skin {
     transform: none;
   }

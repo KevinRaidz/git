@@ -1,254 +1,209 @@
 import { expect, test } from '@playwright/test'
+import { mkdirSync } from 'node:fs'
+import { resolve } from 'node:path'
 
-const pages = [
-  ['/login', '我是老人'],
-  ['/elder/home', '早上好'],
-  ['/elder/sos', '请长按下方按钮呼救'],
-  ['/family/overview', '今日平安时间轴'],
-  ['/community/dashboard', '幸福里社区 · 安全驾驶舱'],
-  ['/community/elders', '三个清单'],
-  ['/community/alerts', '预警工单看板'],
-  ['/volunteer/tasks', '需要处理的任务'],
-  ['/demo/simulator', 'IoT 数据模拟器'],
+const accounts = [
+  ['superadmin', '超级管理员', '系统管理员', '/admin/console', '系统管理'],
+  ['elder', '老人', '张桂芳', '/elder/home', '今日平安'],
+  ['family', '家属', '李伟', '/family/overview', '家人总览'],
+  ['community', '社区', '王芳', '/community/alerts', '关爱响应'],
+  ['volunteer', '志愿者', '赵敏', '/volunteer/tasks', '我的任务'],
 ]
+async function submitDemo(page, role) {
+  await page.getByRole('button', { name: '填入演示账号', exact: true }).click()
+  await page.getByRole('button', { name: `登录${accounts.find(a => a[0] === role)[1]}工作台`, exact: true }).click()
+}
+async function login(page, role) {
+  await page.goto(`/login?role=${role}`)
+  await submitDemo(page, role)
+  await expect(page).toHaveURL(accounts.find(a => a[0] === role)[3])
+}
 
-test('all React routes render without console errors', async ({ page }) => {
-  const consoleErrors = []
-  page.on('console', message => {
-    if (message.type() === 'error') consoleErrors.push(message.text())
-  })
-
-  for (const [path, marker] of pages) {
-    await page.goto(path)
-    await expect(page.getByText(marker, { exact: false }).first()).toBeVisible()
-    const hasPageOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
-    expect(hasPageOverflow, `${path} should not overflow the viewport`).toBe(false)
-  }
-  expect(consoleErrors).toEqual([])
-})
-
-test('unified page uses scroll-driven scene transitions and island glides', async ({ page }, testInfo) => {
-  await page.emulateMedia({ reducedMotion: 'no-preference' })
-  await page.goto('/login')
-  await page.getByRole('button', { name: /体验演示/ }).click()
-  const homeIsland = page.getByRole('radiogroup', { name: '角色快捷入口' })
-  await expect(homeIsland).toBeVisible()
-  await expect(homeIsland.getByRole('radio')).toHaveCount(5)
-  await expect(homeIsland.getByRole('radio', { name: '首页' })).toHaveAttribute('aria-checked', 'true')
-  await expect(page.getByRole('button', { name: /我是老人/ })).toBeVisible()
-  const globalIsland = page.getByTestId('global-island')
-  await globalIsland.evaluate(element => { element.dataset.persistenceProbe = 'same-node' })
-  await page.waitForTimeout(700)
-  await page.screenshot({ path: testInfo.outputPath('login-desktop.png') })
-  const scroller = page.locator('[data-unified-scroller]')
-  await page.mouse.move(720, 450)
-  await page.mouse.wheel(0, 420)
-  await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
-  const transitionOpacities = await page.locator('.unified-scene-stage').evaluate(stage => ({
-    home: Number.parseFloat(getComputedStyle(stage.querySelector('.unified-section-home')).opacity),
-    elder: Number.parseFloat(getComputedStyle(stage.querySelector('.unified-section-elder')).opacity),
-  }))
-  expect(transitionOpacities.home).toBeGreaterThan(0)
-  expect(transitionOpacities.home).toBeLessThan(1)
-  expect(transitionOpacities.elder).toBeGreaterThan(0)
-  await scroller.evaluate(element => { element.scrollTop = 0 })
-  await page.getByRole('button', { name: /我是社区/ }).click({ force: true })
-  await expect(page.getByRole('dialog')).toBeVisible()
-  await page.getByRole('button', { name: /体验演示/ }).click()
-  await homeIsland.getByRole('radio', { name: '社区端' }).click({ force: true })
-  await page.waitForTimeout(120)
-  const earlyProgress = await scroller.evaluate(element => element.scrollTop / (element.scrollHeight - element.clientHeight))
-  expect(earlyProgress).toBeGreaterThan(0)
-  expect(earlyProgress).toBeLessThan(1)
-  await page.screenshot({ path: testInfo.outputPath('transition-midpoint.png') })
-  await expect(page).toHaveURL(/\/login$/)
-  await expect(globalIsland).toHaveAttribute('data-persistence-probe', 'same-node')
-  await expect(homeIsland.getByRole('radio', { name: '社区端' })).toHaveAttribute('aria-checked', 'true', { timeout: 2500 })
-  await expect.poll(() => scroller.evaluate(element => element.scrollTop / (element.scrollHeight - element.clientHeight))).toBeCloseTo(.75, 2)
-  const communitySection = page.locator('.unified-section-community')
-  await expect(communitySection.locator('canvas')).toHaveCount(2)
-  const workOrderChart = communitySection.locator('.work-order-chart')
-  await expect(workOrderChart).toBeVisible()
-  await expect(workOrderChart.locator('.work-order-bullet')).toHaveCount(5)
-  await expect(workOrderChart.locator('.work-order-bullet__target')).toHaveCount(5)
-  const firstDot = communitySection.locator('.map-dot').first()
-  const elderDialog = page.locator('.dashboard-map-card')
-  await firstDot.hover({ force: true })
-  await expect(elderDialog).toBeVisible()
-  await expect(elderDialog).toHaveAttribute('role', 'tooltip')
-  await expect(elderDialog).not.toHaveClass(/is-pinned/)
-  const dotBox = await firstDot.boundingBox()
-  const cardBox = await elderDialog.boundingBox()
-  expect(Math.abs((cardBox.y + cardBox.height / 2) - (dotBox.y + dotBox.height / 2))).toBeLessThan(120)
-  const cardGap = dotBox.x > cardBox.x
-    ? dotBox.x - (cardBox.x + cardBox.width)
-    : cardBox.x - (dotBox.x + dotBox.width)
-  expect(cardGap).toBeGreaterThanOrEqual(0)
-  expect(cardGap).toBeLessThan(40)
-  await firstDot.click({ force: true })
-  await expect(elderDialog).toBeVisible()
-  await expect(elderDialog).toHaveAttribute('role', 'dialog')
-  await expect(elderDialog).toHaveClass(/tone-(green|yellow|red)/)
-  await page.screenshot({ path: testInfo.outputPath('dashboard-desktop.png') })
-  await elderDialog.locator('button').click()
-  await expect(elderDialog).toBeHidden()
-
-  await homeIsland.getByRole('radio', { name: '子女端' }).click({ force: true })
-  await expect(page).toHaveURL(/\/login$/)
-  await expect(homeIsland.getByRole('radio', { name: '子女端' })).toHaveAttribute('aria-checked', 'true', { timeout: 2500 })
-  await expect.poll(() => scroller.evaluate(element => element.scrollTop / (element.scrollHeight - element.clientHeight))).toBeCloseTo(.5, 2)
-  await homeIsland.getByRole('radio', { name: '志愿者端' }).click({ force: true })
-  await expect(homeIsland.getByRole('radio', { name: '志愿者端' })).toHaveAttribute('aria-checked', 'true', { timeout: 2500 })
-  await expect.poll(() => scroller.evaluate(element => element.scrollTop / (element.scrollHeight - element.clientHeight))).toBeCloseTo(1, 2)
-})
-
-test('guest clicks on each role card return to the login dialog', async ({ page }) => {
-  await page.goto('/')
-  await page.getByRole('button', { name: /体验演示/ }).click()
-
-  for (const label of ['我是老人', '我是子女', '我是社区', '我是志愿者']) {
-    await page.getByRole('button', { name: new RegExp(label) }).click()
+for (const [role, label, name, home, nav] of accounts) {
+  test(`${role}: login, matching navigation, refresh and logout`, async ({ page }) => {
+    await page.goto('/')
     await expect(page).toHaveURL(/\/login$/)
-    await expect(page.getByRole('dialog')).toBeVisible()
-    await expect(page.getByRole('heading', { name: '欢迎回来' })).toBeVisible()
-    await page.getByRole('button', { name: /体验演示/ }).click()
-  }
+    await page.getByRole('radio', { name: label, exact: true }).click()
+    await expect(page.getByRole('radio', { name: label, exact: true })).toHaveAttribute('aria-checked', 'true')
+    if (role === 'elder') await expect(page).toHaveURL(/\/login$/)
+    else await expect(page).toHaveURL(new RegExp(`role=${role}`))
+    await submitDemo(page, role)
+    await expect(page).toHaveURL(home)
+    const header = page.getByRole('navigation', { name: '主导航' })
+    await expect(header.getByText(name, { exact: true })).toBeVisible()
+    await expect(header.getByText(`${label}端 · 已登录`, { exact: true })).toBeVisible()
+    await expect(header.getByRole('link', { name: nav, exact: true })).toHaveAttribute('aria-current', 'page')
+    if (role !== 'community') await expect(header.getByRole('link', { name: '场景体验' })).toHaveCount(0)
+    await page.reload()
+    await expect(header.getByText(name, { exact: true })).toBeVisible()
+    await header.getByRole('button', { name: '退出登录' }).click()
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(page.getByRole('heading', { name: '选择身份，登录工作台' })).toBeVisible()
+    await expect(header.getByRole('button', { name: '退出登录' })).toHaveCount(0)
+    expect((await (await page.request.get('/api/session')).json()).role).toBeNull()
+    await page.goto(home)
+    await expect(page).toHaveURL(/\/login\?/)
+  })
+}
+
+test('wrong password shows clear feedback and protected links require correct identity', async ({ page }) => {
+  await page.goto('/community/alerts')
+  await expect(page).toHaveURL(/\/login\?role=community/)
+  await page.getByRole('button', { name: '填入演示账号' }).click()
+  await page.getByLabel('密码', { exact: true }).fill('incorrect')
+  await page.getByRole('button', { name: '登录社区工作台' }).click()
+  await expect(page.getByRole('alert')).toHaveText('账号或密码错误')
+  await login(page, 'family')
+  await page.goto('/community/alerts')
+  await expect(page.getByRole('heading', { name: '请使用社区账号进入' })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: '主导航' }).getByText('李伟', { exact: true })).toBeVisible()
+  const response = await page.request.get('/api/alerts')
+  expect(response.status()).toBe(403)
+  await page.getByRole('link', { name: '切换身份登录' }).click()
+  await submitDemo(page, 'community')
+  await expect(page).toHaveURL('/community/alerts')
 })
 
-test('JellyRadio island changes community routes', async ({ page }, testInfo) => {
-  await page.emulateMedia({ reducedMotion: 'no-preference' })
-  await page.goto('/community/dashboard')
-  const island = page.getByRole('radiogroup', { name: '页面导航' })
-  await expect(island).toBeVisible()
-  await expect(island.getByRole('radio')).toHaveCount(4)
-  const elders = island.getByRole('radio', { name: '三个清单' })
-  await elders.click()
-  await expect(page).toHaveURL(/\/community\/elders$/)
-  await expect(elders).toHaveAttribute('aria-checked', 'true')
-  await expect(elders).toHaveAttribute('style', /scale/)
-  await page.screenshot({ path: testInfo.outputPath('jelly-island.png') })
+test('community menu tracks URL and browser history', async ({ page }) => {
+  const errors = []
+  page.on('pageerror', e => errors.push(e.message))
+  await login(page, 'community')
+  const header = page.getByRole('navigation', { name: '主导航' })
+  await header.getByRole('link', { name: '场景体验' }).click()
+  await expect(page).toHaveURL('/demo/simulator')
+  await expect(header.getByRole('link', { name: '场景体验' })).toHaveAttribute('aria-current', 'page')
+  await page.goBack()
+  await expect(header.getByRole('link', { name: '关爱响应' })).toHaveAttribute('aria-current', 'page')
+  await header.getByRole('link', { name: '老人档案' }).click()
+  await expect(header.getByRole('link', { name: '老人档案' })).toHaveAttribute('aria-current', 'page')
+  expect(errors).toEqual([])
 })
 
-test('mobile family preview scrolls its content', async ({ page }) => {
+test('superadmin and community enter their management workspaces', async ({ page }) => {
+  await login(page, 'superadmin')
+  await expect(page.getByRole('heading', { name: '系统管理' })).toBeVisible()
+  const tabs = page.getByRole('radiogroup', { name: '管理模块' })
+  await tabs.getByRole('radio', { name: '角色权限' }).click()
+  await expect(page.getByLabel('数据范围')).toBeVisible()
+  await page.getByRole('link', { name: '个人中心', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '个人中心' })).toBeVisible()
+
+  await login(page, 'community')
+  const header = page.getByRole('navigation', { name: '主导航' })
+  await header.getByRole('link', { name: '社区管理' }).click()
+  await expect(page).toHaveURL('/community/manage')
+  await expect(page.getByRole('heading', { name: '社区管理' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '账号', exact: true })).toBeVisible()
+})
+
+test('care workflow switches accounts explicitly and delivers family receipt', async ({ page }) => {
+  await login(page, 'community')
+  await page.getByRole('navigation', { name: '主导航' }).getByRole('link', { name: '场景体验' }).click()
+  await page.getByRole('button', { name: '分析信号并生成判断' }).click()
+  await page.getByRole('link', { name: '查看这条工单' }).click()
+  await page.getByRole('button', { name: '安排人员跟进' }).click()
+  await page.getByRole('button', { name: '确认提交', exact: true }).click()
+  await page.getByRole('dialog').waitFor({ state: 'hidden' })
+  await page.getByRole('link', { name: '切换志愿者账号' }).click()
+  await expect(page).toHaveURL(/\/login\?role=volunteer/)
+  await submitDemo(page, 'volunteer')
+  await expect(page).toHaveURL('/volunteer/tasks')
+  await page.getByRole('article').filter({ hasText: '张桂芳' }).getByRole('button', { name: '到场打卡' }).click()
+  await page.getByRole('button', { name: '确认提交', exact: true }).click()
+  await page.getByRole('dialog').waitFor({ state: 'hidden' })
+  await page.getByRole('article').filter({ hasText: '张桂芳' }).getByRole('button', { name: '上传回执并归档' }).click()
+  await page.getByRole('textbox', { name: '服务回执' }).fill('浏览器验证：已核实老人安全并联系家属。')
+  await page.getByRole('button', { name: '确认提交', exact: true }).click()
+  await page.getByRole('dialog').waitFor({ state: 'hidden' })
+  await login(page, 'family')
+  await expect(page.locator('.care-notices').getByText(/浏览器验证：已核实老人安全并联系家属/).first()).toBeVisible()
+})
+
+test('jelly controls keep their active state and fit the mobile viewport', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/login')
-  await page.getByRole('button', { name: /体验演示/ }).click()
+  await page.getByRole('radio', { name: '社区', exact: true }).click()
+  await expect(page.getByRole('radio', { name: '社区', exact: true })).toHaveAttribute('aria-checked', 'true')
+  await page.getByRole('button', { name: '填入演示账号' }).click()
+  await page.getByRole('button', { name: '登录社区工作台', exact: true }).click()
+  await expect(page).toHaveURL('/community/alerts')
 
-  const scroller = page.locator('[data-unified-scroller]')
-  const family = page.locator('.unified-section-family .family-page')
-  await expect(scroller).toBeVisible()
-  const familyChip = page.getByTestId('global-island').locator('.jelly-radio__chip').nth(2)
-  await familyChip.click()
-  await expect(familyChip).toHaveAttribute('aria-checked', 'true')
-  await expect.poll(() => scroller.evaluate(element => element.scrollTop / (element.scrollHeight - element.clientHeight))).toBeCloseTo(.5, 2)
+  const island = page.getByTestId('global-island')
+  const header = page.getByRole('navigation', { name: '主导航' })
+  await expect(island).toHaveCSS('border-radius', '999px')
+  await expect(header.getByRole('link', { name: '关爱响应', exact: true })).toHaveAttribute('data-on', 'true')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
 
-  const dimensions = await family.evaluate(element => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }))
-  expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.clientHeight)
-  await page.mouse.move(190, 560)
-  await page.mouse.wheel(0, 480)
-  await expect.poll(() => family.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
-})
-
-test('JellyRadio filters the three lists by risk', async ({ page }, testInfo) => {
-  await page.emulateMedia({ reducedMotion: 'no-preference' })
-  await page.goto('/community/elders')
-  const filter = page.getByRole('radiogroup', { name: '按风险等级筛选' })
-  await expect(filter).toBeVisible()
-  await expect(filter.getByRole('radio')).toHaveCount(4)
-  const urgent = filter.getByRole('radio', { name: '紧急' })
-  await urgent.click()
-  await expect(urgent).toHaveAttribute('aria-checked', 'true')
-  const archiveRows = page.locator('.data-section').first().locator('tbody tr')
-  await expect(archiveRows.first()).toBeVisible()
-  const rowCount = await archiveRows.count()
-  for (let index = 0; index < rowCount; index += 1) {
-    await expect(archiveRows.nth(index).getByText(/紧急/)).toBeVisible()
+  const filters = page.getByRole('radiogroup', { name: '筛选工单' })
+  await filters.getByRole('radio', { name: '全部记录', exact: true }).click()
+  await expect(filters.getByRole('radio', { name: '全部记录', exact: true })).toHaveAttribute('aria-checked', 'true')
+  const cases = page.getByRole('radiogroup', { name: '工单列表' }).getByRole('radio')
+  await expect(cases.first()).toBeVisible()
+  if (await cases.count() > 1) {
+    await cases.nth(1).click()
+    await expect(cases.nth(1)).toHaveAttribute('aria-checked', 'true')
+    await expect(page).toHaveURL(/id=\d+/)
   }
-  await page.screenshot({ path: testInfo.outputPath('jelly-risk-filter.png'), fullPage: true })
+
+  await header.getByRole('link', { name: '场景体验', exact: true }).click()
+  const scenarios = page.getByRole('radiogroup', { name: '选择模拟场景' })
+  await scenarios.getByRole('radio', { name: /正常生活/ }).click()
+  await expect(scenarios.getByRole('radio', { name: /正常生活/ })).toHaveAttribute('aria-checked', 'true')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
 })
 
-test('mobile layouts keep primary controls inside the viewport', async ({ page }, testInfo) => {
+test('desktop and mobile login and role navigation stay within viewport', async ({ page }) => {
+  mkdirSync(resolve('../preview'), { recursive: true })
+  await page.goto('/login')
+  await expect(page.getByRole('heading', { name: '选择身份，登录工作台' })).toBeVisible()
+  await page.screenshot({ path: resolve('../preview/login-desktop.png'), fullPage: true })
   await page.setViewportSize({ width: 390, height: 844 })
-  for (const [path, marker] of [
-    ['/login', '我是老人'],
-    ['/elder/home', '紧急求助'],
-    ['/family/overview', '今日平安时间轴'],
-    ['/community/alerts', '预警工单看板'],
-  ]) {
-    await page.goto(path)
-    await expect(page.getByText(marker, { exact: false }).first()).toBeVisible()
-    const hasPageOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
-    expect(hasPageOverflow, `${path} should not overflow on mobile`).toBe(false)
-  }
-  await page.goto('/login')
-  await page.getByRole('button', { name: /体验演示/ }).click()
-  const island = page.getByRole('radiogroup', { name: '角色快捷入口' })
-  await island.getByRole('radio', { name: '社区端' }).click()
-  await expect(page).toHaveURL(/\/login$/)
-  await expect(page.locator('.unified-section-community')).toBeInViewport()
-  await page.goto('/family/overview')
-  await page.screenshot({ path: testInfo.outputPath('family-mobile.png'), fullPage: true })
+  await expect(page.getByRole('button', { name: '填入演示账号' })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
+  await page.screenshot({ path: resolve('../preview/login-mobile.png'), fullPage: true })
+  await login(page, 'community')
+  const header = page.getByRole('navigation', { name: '主导航' })
+  await expect(header.getByRole('link', { name: '关爱响应' })).toBeVisible()
+  await expect(header.getByRole('button', { name: '退出登录' })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
+  await page.screenshot({ path: resolve('../preview/navigation-mobile.png'), fullPage: false })
 })
 
-test('family registration signs in to the restricted family screen', async ({ page }) => {
-  const username = `family_${Date.now()}`
-  const phone = `138${String(Date.now()).slice(-8)}`
-  await page.goto('/login')
-  await page.getByRole('button', { name: /注册新账号/ }).click()
-  await page.getByRole('radiogroup', { name: '注册角色' }).getByRole('radio', { name: /子女/ }).click()
-  await page.getByLabel('用户名').fill(username)
-  await page.getByLabel('邮箱').fill(`${username}@example.com`)
-  await page.getByLabel('电话').fill(phone)
-  await page.getByLabel('密码', { exact: true }).fill('family-pass-123')
-  await page.getByLabel('确认密码').fill('family-pass-123')
-  await page.getByRole('button', { name: /创建账号/ }).click()
+test('community manages scoped notification templates and device history', async ({ page }) => {
+  await login(page, 'community')
+  const simulated = await page.request.post('/api/simulator/trigger', { data: { scenario: 'normal' } })
+  expect(simulated.status()).toBe(200)
 
-  await expect(page).toHaveURL(/\/family\/overview$/)
-  await expect(page.getByTestId('user-account-bar')).toContainText(username)
-  await expect(page.getByTestId('global-island')).toHaveCount(0)
-  await expect(page.getByRole('heading', { name: /张桂芳/ })).toBeVisible()
+  await page.getByRole('navigation', { name: '主导航' }).getByRole('link', { name: '社区管理' }).click()
+  const tabs = page.getByRole('radiogroup', { name: '管理模块' })
+  await tabs.getByRole('radio', { name: '设备', exact: true }).click()
+  await page.getByRole('button', { name: '查看 DEV-001-01 的设备读数趋势' }).click()
+  const history = page.getByRole('dialog')
+  await expect(history).toContainText(/\d+ 条读数/)
+  await history.getByRole('button', { name: '关闭' }).click()
 
-  await page.goto('/community/dashboard')
-  await expect(page).toHaveURL(/\/family\/overview$/)
-  const forbiddenStatus = await page.evaluate(async () => (await fetch('/api/elders?preview=1')).status)
-  expect(forbiddenStatus).toBe(403)
+  await tabs.getByRole('radio', { name: '通知模板', exact: true }).click()
+  await page.getByLabel('模板名称').fill('访问进展模板')
+  await page.getByLabel('发送对象').selectOption('family')
+  await page.getByLabel('消息类型').selectOption('service')
+  await page.getByLabel('消息标题').fill('本周探访安排')
+  await page.getByLabel('消息内容').fill('志愿者将于周五上午到访。')
+  await page.getByRole('button', { name: '创建', exact: true }).click()
+  await expect(page.getByRole('row').filter({ hasText: '访问进展模板' })).toBeVisible()
 
-  await page.getByRole('button', { name: '退出登录' }).click()
-  await page.getByRole('button', { name: /登录账号/ }).click()
-  await page.getByRole('radiogroup', { name: '账号身份' }).getByRole('radio', { name: /普通用户/ }).click()
-  await page.getByRole('button', { name: /继续/ }).click()
-  const userRoles = page.getByRole('radiogroup', { name: '用户角色' })
-  await expect(userRoles.getByRole('radio')).toHaveCount(4)
-  await userRoles.getByRole('radio', { name: /子女/ }).click()
-  await page.getByRole('button', { name: /继续/ }).click()
-  await page.getByLabel('邮箱、电话或用户名').fill(`${username}@example.com`)
-  await page.getByLabel('密码', { exact: true }).fill('family-pass-123')
-  await page.getByRole('button', { name: /^登录/ }).click()
-  await expect(page).toHaveURL(/\/family\/overview$/)
+  await tabs.getByRole('radio', { name: '消息', exact: true }).click()
+  await page.getByLabel('套用通知模板').selectOption({ label: '访问进展模板' })
+  await expect(page.getByLabel('消息标题')).toHaveValue('本周探访安排')
+  await expect(page.getByLabel('消息内容')).toHaveValue('志愿者将于周五上午到访。')
 })
 
-test('administrator login returns to the original home with full access', async ({ page }) => {
-  await page.goto('/login')
-  await page.getByRole('button', { name: /登录账号/ }).click()
-  await page.getByRole('radio', { name: /管理员/ }).click()
-  await page.getByRole('button', { name: /继续/ }).click()
-  await page.getByLabel(/邮箱、电话或用户名/).fill('admin')
-  await page.getByLabel('密码', { exact: true }).fill('admin123456')
-  await page.getByRole('button', { name: /^登录/ }).click()
-
-  await expect(page).toHaveURL(/\/$/)
-  await expect(page.getByTestId('global-island')).toBeVisible()
-  const homeNavigation = page.getByRole('radiogroup', { name: '角色快捷入口' })
-  await expect(homeNavigation.getByRole('radio')).toHaveCount(5)
-  await homeNavigation.getByRole('radio', { name: '老人端' }).click()
-  await expect(page.locator('.unified-section-elder')).toBeInViewport()
-  await homeNavigation.getByRole('radio', { name: '社区端' }).click()
-  await expect(page.locator('.unified-section-community .work-order-chart')).toBeVisible()
-
-  await page.goto('/elder/sos')
-  await expect(page.getByText('紧急求助', { exact: false }).first()).toBeVisible()
-  await page.goto('/family/overview')
-  await expect(page.getByText('今日平安时间轴')).toBeVisible()
-  await page.goto('/volunteer/tasks')
-  await expect(page.getByText('需要处理的任务')).toBeVisible()
+test('superadmin can configure periodic backup interval', async ({ page }) => {
+  await login(page, 'superadmin')
+  const tabs = page.getByRole('radiogroup', { name: '管理模块' })
+  await tabs.getByRole('radio', { name: '备份恢复', exact: true }).click()
+  const interval = page.getByLabel('间隔（小时）')
+  await expect(interval).toHaveValue('24')
+  await interval.fill('48')
+  await page.getByRole('button', { name: '保存间隔' }).click()
+  await expect(interval).toHaveValue('48')
 })

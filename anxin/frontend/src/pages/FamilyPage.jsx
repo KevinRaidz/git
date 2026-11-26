@@ -1,6 +1,6 @@
-import { BellRing, Phone, Sparkles, Stethoscope, Utensils, WandSparkles } from 'lucide-react'
+import { Phone } from 'lucide-react'
 import { useMemo } from 'react'
-import { useToast } from '../App'
+import FamilyCare from '../components/FamilyCare'
 import EChart from '../components/EChart'
 import LoadingState, { ErrorState } from '../components/LoadingState'
 import { useApi } from '../hooks'
@@ -8,9 +8,8 @@ import { useApi } from '../hooks'
 const levelText = { green: '平安', yellow: '需关注', red: '紧急' }
 const statusText = { pending: '待核实', dispatched: '已派单', processing: '处置中', closed: '已归档' }
 
-export default function FamilyPage({ embedded = false }) {
-  const { data, loading, error, reload } = useApi(`/api/family/overview${embedded ? '?preview=1' : ''}`)
-  const toast = useToast()
+export default function FamilyPage() {
+  const { data, loading, error, reload } = useApi('/api/family/overview', { interval: 3000 })
   const scores = useMemo(() => data?.readings?.map(item => item.score) || [], [data])
   const average = scores.length ? scores.slice(0, -1).reduce((sum, value) => sum + value, 0) / Math.max(1, scores.length - 1) : 0
   const chartOption = useMemo(() => ({
@@ -27,7 +26,7 @@ export default function FamilyPage({ embedded = false }) {
   }), [data, scores, average])
 
   if (loading) return <LoadingState label="正在加载家人状态" />
-  if (error) return <ErrorState message={error} onRetry={reload} />
+  if (error && !data) return <ErrorState message={error} onRetry={reload} />
   const { elder, events, alerts } = data
 
   return (
@@ -41,9 +40,10 @@ export default function FamilyPage({ embedded = false }) {
         </div>
         <div className="summary-actions">
           <a className="btn" href={`tel:${elder.emergency_phone || ''}`}><Phone size={17} /> 打电话</a>
-          <button className="btn btn-ghost" type="button" onClick={() => toast('提醒已发送给老人', 'info')}><BellRing size={17} /> 发提醒</button>
         </div>
       </section>
+
+      <FamilyCare notices={data.notices} alerts={alerts} reload={reload} />
 
       <div className="grid-8-4">
         <section className="card">
@@ -69,15 +69,6 @@ export default function FamilyPage({ embedded = false }) {
         </section>
       </div>
 
-      <section className="service-band">
-        <div><span className="section-kicker">社区服务</span><h2>需要时，社区可以代为预约</h2></div>
-        <div className="service-actions">
-          <button type="button" onClick={() => toast('已提交社区助餐预约', 'info')}><Utensils />助餐</button>
-          <button type="button" onClick={() => toast('已提交陪同就医预约', 'info')}><Stethoscope />助医</button>
-          <button type="button" onClick={() => toast('已提交居室保洁预约', 'info')}><WandSparkles />保洁</button>
-          <button type="button" onClick={() => toast('网格员将在工作时间联系您', 'info')}><Sparkles />其他</button>
-        </div>
-      </section>
     </div>
   )
 }
