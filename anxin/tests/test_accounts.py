@@ -31,10 +31,29 @@ class AccountAccessTest(unittest.TestCase):
     def test_credentials_and_role_validated(self):
         self.assertEqual(self.login('elder', password='wrong').status_code, 401)
         self.assertEqual(self.login('elder', role='community').status_code, 403)
-        self.assertIsNone(self.client.get('/api/session').get_json()['user'])
+        session = self.client.get('/api/session').get_json()
+        self.assertIsNone(session['user'])
+        self.assertTrue(session['demo_login_enabled'])
         user = self.login('elder').get_json()['user']
         self.assertEqual(user['role'], 'elder')
         self.assertNotIn('password_hash', user)
+
+    def test_session_can_disable_public_demo_credentials(self):
+        previous = app.config['DEMO_LOGIN_ENABLED']
+        app.config['DEMO_LOGIN_ENABLED'] = False
+        try:
+            session = self.client.get('/api/session').get_json()
+            self.assertFalse(session['demo_login_enabled'])
+        finally:
+            app.config['DEMO_LOGIN_ENABLED'] = previous
+
+    def test_sqlite_uses_wal_and_waits_for_lock_contention(self):
+        conn = db.get_conn()
+        try:
+            self.assertEqual(conn.execute('PRAGMA journal_mode').fetchone()[0], 'wal')
+            self.assertEqual(conn.execute('PRAGMA busy_timeout').fetchone()[0], 30000)
+        finally:
+            conn.close()
 
     def test_session_persists_and_logout_revokes_access(self):
         self.assertEqual(self.login('family').status_code, 200)

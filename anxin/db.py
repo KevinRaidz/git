@@ -50,7 +50,8 @@ CHRONIC_DEVICES = "智能水表,智能电表,门磁,红外活动监测"
 
 
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.execute('PRAGMA busy_timeout=30000')
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -275,6 +276,7 @@ def seed():
 def init_db():
     """建库：表不存在则建表，无数据则写种子数据"""
     conn = get_conn()
+    conn.execute('PRAGMA journal_mode=WAL')
     conn.executescript(SCHEMA)
     import care
     care.init_schema(conn)

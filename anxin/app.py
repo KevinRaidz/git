@@ -33,6 +33,7 @@ app.config.update(
     SESSION_COOKIE_SAMESITE='Lax',
     SESSION_COOKIE_SECURE=IS_PRODUCTION,
     PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+    DEMO_LOGIN_ENABLED=not IS_PRODUCTION,
 )
 
 DEMO_ELDER_ID = 1  # 演示主角：张桂芳（82 岁独居，儿子李伟在上海）
@@ -226,6 +227,7 @@ def api_session():
         "home": ROLE_HOME.get(role, "/login"),
         "today": today_str(),
         "weekday": WEEKDAYS[datetime.now().weekday()],
+        "demo_login_enabled": app.config['DEMO_LOGIN_ENABLED'],
     })
 
 

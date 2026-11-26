@@ -67,7 +67,7 @@ export default function SignInPage() {
         {error && <p className="auth-error" role="alert">{error}</p>}
         <button type="submit" className="btn auth-submit" disabled={pending}><LockKeyhole size={18} />{pending ? '正在验证账号…' : `登录${account.label}工作台`}</button>
       </form>
-      <div className="auth-demo"><div><strong>先体验演示账号</strong><p>{account.name} · {account.username}<br />统一演示密码：Anxin2026!</p></div><button type="button" disabled={pending} onClick={() => { setUsername(account.username); setPassword('Anxin2026!'); setError('') }}>填入演示账号</button></div>
+      {session?.demo_login_enabled && <div className="auth-demo"><div><strong>先体验演示账号</strong><p>{account.name} · {account.username}<br />统一演示密码：Anxin2026!</p></div><button type="button" disabled={pending} onClick={() => { setUsername(account.username); setPassword('Anxin2026!'); setError('') }}>填入演示账号</button></div>}
       <p className="auth-bottom">演示数据用于体验流程。切换身份需重新登录，账号由服务端校验。</p>
     </section>
   </main>
