@@ -55,6 +55,33 @@ CHRONIC_DEVICES = "智能水表,智能电表,门磁,红外活动监测"
 
 
 _LOGIN_TRACE_LOCK = threading.Lock()
+_LOGIN_PROBE_LOCK = threading.Lock()
+_LOGIN_PROBE_STARTED = False
+
+
+def _start_login_open_probe(logger):
+    global _LOGIN_PROBE_STARTED
+    with _LOGIN_PROBE_LOCK:
+        if _LOGIN_PROBE_STARTED:
+            return
+        _LOGIN_PROBE_STARTED = True
+
+    def probe():
+        started = time.monotonic()
+        logger.info('session_login sqlite_process_probe state=started pid=%s tid=%s',
+                    os.getpid(), threading.get_native_id())
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_PATH, timeout=30)
+            logger.info('session_login sqlite_process_probe state=completed elapsed_ms=%.1f',
+                        (time.monotonic() - started) * 1000)
+        except Exception:
+            logger.exception('session_login sqlite_process_probe state=failed')
+        finally:
+            if conn is not None:
+                conn.close()
+
+    threading.Thread(target=probe, name='login-sqlite-open-probe', daemon=True).start()
 
 
 def get_conn(trace_login=False):
@@ -63,6 +90,7 @@ def get_conn(trace_login=False):
     trace_owner = trace_login and _LOGIN_TRACE_LOCK.acquire(blocking=False)
     if trace_owner:
         faulthandler.dump_traceback_later(12, file=sys.stderr, repeat=False)
+        _start_login_open_probe(logger)
     if trace_login:
         logger.info('session_login sqlite_open state=started pid=%s tid=%s',
                     os.getpid(), threading.get_native_id())
