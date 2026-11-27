@@ -6,8 +6,11 @@ SQLite 建表 + 演示数据种子。首次运行 app.py 时自动初始化 anxi
 """
 import os
 import sqlite3
+import faulthandler
 import logging
 import random
+import sys
+import threading
 import time
 from datetime import datetime, timedelta
 
@@ -51,23 +54,35 @@ ELDERS_SEED = [
 CHRONIC_DEVICES = "智能水表,智能电表,门磁,红外活动监测"
 
 
+_LOGIN_TRACE_LOCK = threading.Lock()
+
+
 def get_conn(trace_login=False):
     logger = logging.getLogger('app')
     started = time.monotonic()
+    trace_owner = trace_login and _LOGIN_TRACE_LOCK.acquire(blocking=False)
+    if trace_owner:
+        faulthandler.dump_traceback_later(12, file=sys.stderr, repeat=False)
     if trace_login:
-        logger.info('session_login sqlite_open state=started')
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    if trace_login:
-        logger.info('session_login sqlite_open state=completed elapsed_ms=%.1f',
-                    (time.monotonic() - started) * 1000)
-        started = time.monotonic()
-        logger.info('session_login sqlite_busy_timeout state=started')
-    conn.execute('PRAGMA busy_timeout=30000')
-    if trace_login:
-        logger.info('session_login sqlite_busy_timeout state=completed elapsed_ms=%.1f',
-                    (time.monotonic() - started) * 1000)
-    conn.row_factory = sqlite3.Row
-    return conn
+        logger.info('session_login sqlite_open state=started pid=%s tid=%s',
+                    os.getpid(), threading.get_native_id())
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=30)
+        if trace_login:
+            logger.info('session_login sqlite_open state=completed elapsed_ms=%.1f',
+                        (time.monotonic() - started) * 1000)
+            started = time.monotonic()
+            logger.info('session_login sqlite_busy_timeout state=started')
+        conn.execute('PRAGMA busy_timeout=30000')
+        if trace_login:
+            logger.info('session_login sqlite_busy_timeout state=completed elapsed_ms=%.1f',
+                        (time.monotonic() - started) * 1000)
+        conn.row_factory = sqlite3.Row
+        return conn
+    finally:
+        if trace_owner:
+            faulthandler.cancel_dump_traceback_later()
+            _LOGIN_TRACE_LOCK.release()
 
 
 def query(sql, args=()):
